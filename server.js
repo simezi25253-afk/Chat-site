@@ -16,6 +16,37 @@ mongoose.connect(mongoURI, {
 }).catch(err => {
   console.error('❌ MongoDB connection error:', err);
 });
+const mongoose = require('mongoose');
+
+// MongoDBの接続URI（パスワード埋め込み済み）
+const mongoURI = 'mongodb+srv://simezi25253:DJAtPESi3iluSnab@chat-site-app.quoghij.mongodb.net/?retryWrites=true&w=majority';
+
+mongoose.connect(mongoURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => {
+  console.log('✅ Connected to MongoDB');
+}).catch(err => {
+  console.error('❌ MongoDB connection error:', err);
+});
+
+// MongoDBに保存するデータの構造を定義
+const messageSchema = new mongoose.Schema({
+  userId: String,
+  nickname: String,
+  text: String,
+  ts: Number,
+  readBy: [String]
+});
+
+const roomSchema = new mongoose.Schema({
+  name: String,
+  password: String,
+  leader: String,
+  messages: [messageSchema]
+});
+
+const Room = mongoose.model('Room', roomSchema);
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -54,19 +85,32 @@ io.on('connection', (socket) => {
     });
   });
 
-  socket.on('newMessage', ({ room, text }) => {
-    if (!rooms[room]) return;
-    const msg = {
-      id: `${Date.now()}-${socket.id}`,
-      userId: socket.id,
-      nickname: rooms[room].users[socket.id],
-      text,
-      ts: Date.now(),
-      readBy: [socket.id]
-    };
-    rooms[room].messages.push(msg);
-    io.to(room).emit('newMessage', msg);
-  });
+  socket.on('newMessage', async ({ room, text }) => {
+  if (!rooms[room]) return;
+
+  const msg = {
+    id: `${Date.now()}-${socket.id}`,
+    userId: socket.id,
+    nickname: rooms[room].users[socket.id],
+    text,
+    ts: Date.now(),
+    readBy: [socket.id]
+  };
+
+  rooms[room].messages.push(msg);
+  io.to(room).emit('newMessage', msg);
+
+  // MongoDBにも保存
+  try {
+    await Room.updateOne(
+      { name: room },
+      { $push: { messages: msg } },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error('❌ MongoDBへの保存に失敗:', err);
+  }
+});
 
   socket.on('messageRead', ({ room, messageId }) => {
     const msg = rooms[room]?.messages.find(m => m.id === messageId);

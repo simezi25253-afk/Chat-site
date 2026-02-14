@@ -1,3 +1,4 @@
+// routes/myRooms.js
 const express = require('express');
 const router = express.Router();
 const Room = require('../models/Room');
@@ -10,10 +11,7 @@ router.get('/my-rooms', async (req, res) => {
 
   try {
     const userId = new Types.ObjectId(req.session.userId);
-
-    // 自分がメンバーに含まれているルームを取得
     const rooms = await Room.find({ members: userId }).select('name _id');
-
     res.json({ rooms });
   } catch (err) {
     console.error('❌ /my-rooms エラー:', err);

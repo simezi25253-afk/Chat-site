@@ -18,7 +18,7 @@
       padding: 2rem;
       border-radius: 8px;
       box-shadow: 0 0 10px rgba(0,0,0,0.1);
-      width: 300px;
+      width: 320px;
     }
     h2 {
       text-align: center;
@@ -48,18 +48,25 @@
       text-align: center;
       margin-top: 1rem;
     }
+    .error {
+      color: red;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <div class="login-container">
-    <h2>ログイン</h2>
+    <h2>アクセスコードでログイン</h2>
     <form id="loginForm">
-      <input type="text" name="username" placeholder="ユーザー名" required />
-      <input type="password" name="password" placeholder="パスワード" required />
+      <input type="text" name="accessCode" placeholder="4桁のアクセスコード" pattern="\d{4}" required />
+      <div id="error" class="error"></div>
       <button type="submit">ログイン</button>
     </form>
     <div class="link">
-      <p>アカウントがない？ <a href="/register.html">新規登録</a></p>
+      <p>アクセスコードをお持ちでない場合</p>
+      <button onclick="window.location.href='/register.html'">新規登録はこちら</button>
     </div>
   </div>
 
@@ -67,19 +74,27 @@
     document.getElementById('loginForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target;
+      const errorDiv = document.getElementById('error');
+      errorDiv.textContent = '';
+
+      const accessCode = form.accessCode.value.trim();
+
+      if (!/^\d{4}$/.test(accessCode)) {
+        errorDiv.textContent = 'アクセスコードに使用できるのは半角数字のみです。';
+        return;
+      }
+
       const res = await fetch('/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: form.username.value,
-          password: form.password.value
-        })
+        body: JSON.stringify({ accessCode })
       });
+
       const data = await res.json();
       if (res.ok) {
         window.location.href = '/chat';
       } else {
-        alert(data.error || 'ログインに失敗しました');
+        errorDiv.textContent = data.error || 'ログインに失敗しました';
       }
     });
   </script>

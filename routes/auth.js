@@ -2,40 +2,35 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 
-// ユーザー登録
 router.post('/register', async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, accessCode } = req.body;
+
+  // アクセスコードが4桁の半角数字かチェック
+  if (!/^\d{4}$/.test(accessCode)) {
+    return res.status(400).json({ error: 'アクセスコードに使用できるのは半角数字のみです。' });
+  }
+
   try {
-    const user = new User({ username, password });
+    // アクセスコードの重複チェック
+    const existingCode = await User.findOne({ accessCode });
+    if (existingCode) {
+      return res.status(400).json({ error: 'そのアクセスコードはすでに使用されています。' });
+    }
+
+    // ユーザー名の重複チェック（任意）
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return res.status(400).json({ error: 'そのユーザー名はすでに使われています。' });
+    }
+
+    const user = new User({ username, password, accessCode });
     await user.save();
     req.session.userId = user._id;
     res.status(201).json({ message: '登録成功', user: { username: user.username } });
   } catch (err) {
-    res.status(400).json({ error: '登録に失敗しました' });
+    console.error('❌ 登録エラー:', err);
+    res.status(500).json({ error: 'サーバーエラーが発生しました' });
   }
-});
-
-// ログイン
-router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ error: 'ユーザー名またはパスワードが間違っています' });
-    }
-    req.session.userId = user._id;
-    res.json({ message: 'ログイン成功', user: { username: user.username } });
-  } catch (err) {
-    res.status(500).json({ error: 'ログイン中にエラーが発生しました' });
-  }
-});
-
-// ログアウト
-router.post('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.clearCookie('connect.sid');
-    res.json({ message: 'ログアウトしました' });
-  });
 });
 
 module.exports = router;

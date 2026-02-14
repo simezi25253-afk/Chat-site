@@ -1,0 +1,19 @@
+#messages .message {
+  border-bottom: 1px solid #ddd;
+  padding: 5px;
+  position: relative;
+}
+
+#messages .message .delete-btn {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  cursor: pointer;
+  color: red;
+}
+
+#messages .message .read-count {
+  font-size: 0.8em;
+  color: gray;
+  margin-left: 10px;
+}

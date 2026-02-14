@@ -7,6 +7,7 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const authRoutes = require('./routes/auth');
+const myRoomsRoutes = require('./routes/myRooms'); // ✅ 追加
 const requireLogin = require('./middleware/auth');
 
 // MongoDBの接続URI
@@ -32,9 +33,9 @@ app.use(session({
   }),
   cookie: {
     maxAge: 1000 * 60 * 60, // 1時間
-    sameSite: 'lax',        // ← 追加：セッション維持に重要
-    secure: false,          // ← 追加：Render無料プランはHTTPSじゃない
-    httpOnly: true          // ← セキュリティ強化
+    sameSite: 'lax',
+    secure: false,
+    httpOnly: true
   }
 }));
 
@@ -49,6 +50,7 @@ app.get('/', (req, res) => {
 
 // 認証ルート
 app.use('/', authRoutes);
+app.use('/', myRoomsRoutes); // ✅ 追加
 
 // チャットページ（ログイン必須）
 app.get('/chat', requireLogin, (req, res) => {

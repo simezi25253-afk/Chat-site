@@ -34,7 +34,11 @@ io.on('connection', (socket) => {
     socket.join(room);
     socket.emit('leader', rooms[room].leader);
     io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
-    callback({ ok: true, isLeader: rooms[room].leader === socket.id, messages: rooms[room].messages });
+    callback({
+      ok: true,
+      isLeader: rooms[room].leader === socket.id,
+      messages: rooms[room].messages
+    });
   });
 
   socket.on('newMessage', ({ room, text }) => {
@@ -55,12 +59,17 @@ io.on('connection', (socket) => {
     const msg = rooms[room]?.messages.find(m => m.id === messageId);
     if (msg && !msg.readBy.includes(socket.id)) {
       msg.readBy.push(socket.id);
-      io.to(room).emit('updateRead', { messageId, readCount: msg.readBy.length });
+      io.to(room).emit('updateRead', {
+        messageId,
+        readCount: msg.readBy.length
+      });
     }
   });
 
   socket.on('deleteMessage', ({ room, messageId }) => {
-    const index = rooms[room]?.messages.findIndex(m => m.id === messageId && m.userId === socket.id);
+    const index = rooms[room]?.messages.findIndex(
+      m => m.id === messageId && m.userId === socket.id
+    );
     if (index !== -1 && index !== undefined) {
       rooms[room].messages.splice(index, 1);
       io.to(room).emit('deleteMessage', { messageId });
@@ -76,7 +85,10 @@ io.on('connection', (socket) => {
   socket.on('changeNickname', ({ room, newNick }) => {
     if (rooms[room]?.users[socket.id]) {
       rooms[room].users[socket.id] = newNick;
-      io.to(room).emit('updateNickname', { userId: socket.id, newNick });
+      io.to(room).emit('updateNickname', {
+        userId: socket.id,
+        newNick
+      });
       io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
     }
   });
@@ -97,6 +109,8 @@ io.on('connection', (socket) => {
   });
 });
 
-http.listen(3000, () => {
-  console.log('Server running on port 3000');
+// ★ Render対応：ポート番号を環境変数から取得
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });

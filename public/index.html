@@ -4,9 +4,26 @@
     <meta charset="UTF-8" />
     <title>Multi-Chat</title>
     <link rel="stylesheet" href="styles1.css" />
+    <script>
+      async function checkLoginAndGo() {
+        try {
+          const res = await fetch('/me');
+          if (!res.ok) {
+            // 未ログインならログイン画面へ
+            window.location.href = '/login.html';
+          } else {
+            // ログイン済みならホーム画面へ
+            window.location.href = '/home.html';
+          }
+        } catch (err) {
+          // エラー時もログイン画面へ
+          window.location.href = '/login.html';
+        }
+      }
+    </script>
   </head>
   <body>
     <h1>Welcome to Multi-Chat</h1>
-    <p><a href="page1.html">Go to Chat</a></p>
+    <p><a href="#" onclick="checkLoginAndGo()">Go to Chat</a></p>
   </body>
 </html>

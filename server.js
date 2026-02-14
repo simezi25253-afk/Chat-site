@@ -21,13 +21,21 @@ mongoose.connect(mongoURI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// セッション設定
+// ✅ セッション設定（修正版）
 app.use(session({
   secret: 'your-secret-key',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: mongoURI }),
-  cookie: { maxAge: 1000 * 60 * 60 } // 1時間
+  store: MongoStore.create({
+    mongoUrl: mongoURI,
+    collectionName: 'sessions'
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60, // 1時間
+    sameSite: 'lax',        // ← 追加：セッション維持に重要
+    secure: false,          // ← 追加：Render無料プランはHTTPSじゃない
+    httpOnly: true          // ← セキュリティ強化
+  }
 }));
 
 app.use(express.json());

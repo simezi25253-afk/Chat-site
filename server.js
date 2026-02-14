@@ -9,6 +9,7 @@ const MongoStore = require('connect-mongo');
 const authRoutes = require('./routes/auth');
 const myRoomsRoutes = require('./routes/myRooms'); // ✅ 追加
 const requireLogin = require('./middleware/auth');
+const Room = require('./models/Room'); // ✅ Roomモデルを外部から読み込み
 
 // MongoDBの接続URI
 const mongoURI = 'mongodb+srv://simezi25253:DJAtPESi3iluSnab@chat-site-app.quoghij.mongodb.net/?retryWrites=true&w=majority';
@@ -57,25 +58,7 @@ app.get('/chat', requireLogin, (req, res) => {
   res.sendFile(__dirname + '/public/chat.html');
 });
 
-// MongoDBに保存するデータの構造
-const messageSchema = new mongoose.Schema({
-  id: String,
-  userId: String,
-  nickname: String,
-  text: String,
-  ts: Number,
-  readBy: [String]
-});
-
-const roomSchema = new mongoose.Schema({
-  name: String,
-  password: String,
-  leader: String,
-  messages: [messageSchema]
-});
-
-const Room = mongoose.model('Room', roomSchema);
-
+// ルーム情報の復元
 const rooms = {};
 const loadRoomsFromDB = async () => {
   try {

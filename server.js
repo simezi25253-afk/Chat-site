@@ -3,9 +3,13 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const path = require('path');
-const mongoose = require('mongoose'); // ← ✅ ここだけでOK！
+const mongoose = require('mongoose');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+const authRoutes = require('./routes/auth');
+const requireLogin = require('./middleware/auth');
 
-// MongoDBの接続URI（パスワード埋め込み済み）
+// MongoDBの接続URI
 const mongoURI = 'mongodb+srv://simezi25253:DJAtPESi3iluSnab@chat-site-app.quoghij.mongodb.net/?retryWrites=true&w=majority';
 
 mongoose.connect(mongoURI, {
@@ -17,8 +21,30 @@ mongoose.connect(mongoURI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// MongoDBに保存するデータの構造を定義
+// セッション設定
+app.use(session({
+  secret: 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({ mongoUrl: mongoURI }),
+  cookie: { maxAge: 1000 * 60 * 60 } // 1時間
+}));
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// 認証ルート
+app.use('/', authRoutes);
+
+// チャットページ（ログイン必須）
+app.get('/chat', requireLogin, (req, res) => {
+  res.sendFile(__dirname + '/public/chat.html');
+});
+
+// MongoDBに保存するデータの構造
 const messageSchema = new mongoose.Schema({
+  id: String,
   userId: String,
   nickname: String,
   text: String,
@@ -35,13 +61,6 @@ const roomSchema = new mongoose.Schema({
 
 const Room = mongoose.model('Room', roomSchema);
 
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ★ トップページ（/）にアクセスがあったときに index.html を返す
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
-});
-
 const rooms = {};
 const loadRoomsFromDB = async () => {
   try {
@@ -49,7 +68,7 @@ const loadRoomsFromDB = async () => {
     allRooms.forEach(r => {
       rooms[r.name] = {
         password: r.password,
-        users: {}, // 起動時は誰も接続してないので空
+        users: {},
         messages: r.messages,
         leader: r.leader
       };
@@ -91,31 +110,30 @@ io.on('connection', (socket) => {
   });
 
   socket.on('newMessage', async ({ room, text }) => {
-  if (!rooms[room]) return;
+    if (!rooms[room]) return;
 
-  const msg = {
-    id: `${Date.now()}-${socket.id}`,
-    userId: socket.id,
-    nickname: rooms[room].users[socket.id],
-    text,
-    ts: Date.now(),
-    readBy: [socket.id]
-  };
+    const msg = {
+      id: `${Date.now()}-${socket.id}`,
+      userId: socket.id,
+      nickname: rooms[room].users[socket.id],
+      text,
+      ts: Date.now(),
+      readBy: [socket.id]
+    };
 
-  rooms[room].messages.push(msg);
-  io.to(room).emit('newMessage', msg);
+    rooms[room].messages.push(msg);
+    io.to(room).emit('newMessage', msg);
 
-  // MongoDBにも保存
-  try {
-    await Room.updateOne(
-      { name: room },
-      { $push: { messages: msg } },
-      { upsert: true }
-    );
-  } catch (err) {
-    console.error('❌ MongoDBへの保存に失敗:', err);
-  }
-});
+    try {
+      await Room.updateOne(
+        { name: room },
+        { $push: { messages: msg } },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.error('❌ MongoDBへの保存に失敗:', err);
+    }
+  });
 
   socket.on('messageRead', ({ room, messageId }) => {
     const msg = rooms[room]?.messages.find(m => m.id === messageId);
@@ -128,25 +146,24 @@ io.on('connection', (socket) => {
     }
   });
 
- socket.on('deleteMessage', async ({ room, messageId }) => {
-  const index = rooms[room]?.messages.findIndex(
-    m => m.id === messageId && m.userId === socket.id
-  );
-  if (index !== -1 && index !== undefined) {
-    rooms[room].messages.splice(index, 1);
-    io.to(room).emit('deleteMessage', { messageId });
+  socket.on('deleteMessage', async ({ room, messageId }) => {
+    const index = rooms[room]?.messages.findIndex(
+      m => m.id === messageId && m.userId === socket.id
+    );
+    if (index !== -1 && index !== undefined) {
+      rooms[room].messages.splice(index, 1);
+      io.to(room).emit('deleteMessage', { messageId });
 
-    // MongoDBからも削除
-    try {
-      await Room.updateOne(
-        { name: room },
-        { $pull: { messages: { id: messageId, userId: socket.id } } }
-      );
-    } catch (err) {
-      console.error('❌ MongoDBからのメッセージ削除に失敗:', err);
+      try {
+        await Room.updateOne(
+          { name: room },
+          { $pull: { messages: { id: messageId, userId: socket.id } } }
+        );
+      } catch (err) {
+        console.error('❌ MongoDBからのメッセージ削除に失敗:', err);
+      }
     }
-  }
-});
+  });
 
   socket.on('changePassword', ({ room, newPassword }) => {
     if (rooms[room]?.leader === socket.id) {
@@ -181,7 +198,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// ★ Render対応：ポート番号を環境変数から取得
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

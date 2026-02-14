@@ -44,6 +44,7 @@ router.post('/login', async (req, res) => {
   }
 
   try {
+    // ✅ 修正ポイント：findById → findOne に変更
     const user = await User.findOne({ accessCode });
     if (!user) {
       return res.status(401).json({ error: 'アクセスコードが無効です。' });

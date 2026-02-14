@@ -56,6 +56,24 @@ app.get('/', (req, res) => {
 });
 
 const rooms = {};
+const loadRoomsFromDB = async () => {
+  try {
+    const allRooms = await Room.find({});
+    allRooms.forEach(r => {
+      rooms[r.name] = {
+        password: r.password,
+        users: {}, // 起動時は誰も接続してないので空
+        messages: r.messages,
+        leader: r.leader
+      };
+    });
+    console.log('🔁 MongoDBからルーム情報を復元しました');
+  } catch (err) {
+    console.error('❌ MongoDBからの読み込みに失敗:', err);
+  }
+};
+
+loadRoomsFromDB();
 
 io.on('connection', (socket) => {
   let currentRoom = null;

@@ -141,15 +141,25 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('deleteMessage', ({ room, messageId }) => {
-    const index = rooms[room]?.messages.findIndex(
-      m => m.id === messageId && m.userId === socket.id
-    );
-    if (index !== -1 && index !== undefined) {
-      rooms[room].messages.splice(index, 1);
-      io.to(room).emit('deleteMessage', { messageId });
+ socket.on('deleteMessage', async ({ room, messageId }) => {
+  const index = rooms[room]?.messages.findIndex(
+    m => m.id === messageId && m.userId === socket.id
+  );
+  if (index !== -1 && index !== undefined) {
+    rooms[room].messages.splice(index, 1);
+    io.to(room).emit('deleteMessage', { messageId });
+
+    // MongoDBからも削除
+    try {
+      await Room.updateOne(
+        { name: room },
+        { $pull: { messages: { id: messageId, userId: socket.id } } }
+      );
+    } catch (err) {
+      console.error('❌ MongoDBからのメッセージ削除に失敗:', err);
     }
-  });
+  }
+});
 
   socket.on('changePassword', ({ room, newPassword }) => {
     if (rooms[room]?.leader === socket.id) {

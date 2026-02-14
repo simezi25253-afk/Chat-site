@@ -1,0 +1,102 @@
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+const path = require('path');
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ★ トップページ（/）にアクセスがあったときに index.html を返す
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/public/index.html');
+});
+
+const rooms = {};
+
+io.on('connection', (socket) => {
+  let currentRoom = null;
+
+  socket.on('joinRoom', ({ room, password, nickname }, callback) => {
+    if (!rooms[room]) {
+      rooms[room] = {
+        password,
+        users: {},
+        messages: [],
+        leader: socket.id
+      };
+    } else if (rooms[room].password !== password) {
+      return callback({ ok: false, error: 'Wrong password' });
+    }
+
+    currentRoom = room;
+    rooms[room].users[socket.id] = nickname;
+
+    socket.join(room);
+    socket.emit('leader', rooms[room].leader);
+    io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
+    callback({ ok: true, isLeader: rooms[room].leader === socket.id, messages: rooms[room].messages });
+  });
+
+  socket.on('newMessage', ({ room, text }) => {
+    if (!rooms[room]) return;
+    const msg = {
+      id: `${Date.now()}-${socket.id}`,
+      userId: socket.id,
+      nickname: rooms[room].users[socket.id],
+      text,
+      ts: Date.now(),
+      readBy: [socket.id]
+    };
+    rooms[room].messages.push(msg);
+    io.to(room).emit('newMessage', msg);
+  });
+
+  socket.on('messageRead', ({ room, messageId }) => {
+    const msg = rooms[room]?.messages.find(m => m.id === messageId);
+    if (msg && !msg.readBy.includes(socket.id)) {
+      msg.readBy.push(socket.id);
+      io.to(room).emit('updateRead', { messageId, readCount: msg.readBy.length });
+    }
+  });
+
+  socket.on('deleteMessage', ({ room, messageId }) => {
+    const index = rooms[room]?.messages.findIndex(m => m.id === messageId && m.userId === socket.id);
+    if (index !== -1 && index !== undefined) {
+      rooms[room].messages.splice(index, 1);
+      io.to(room).emit('deleteMessage', { messageId });
+    }
+  });
+
+  socket.on('changePassword', ({ room, newPassword }) => {
+    if (rooms[room]?.leader === socket.id) {
+      rooms[room].password = newPassword;
+    }
+  });
+
+  socket.on('changeNickname', ({ room, newNick }) => {
+    if (rooms[room]?.users[socket.id]) {
+      rooms[room].users[socket.id] = newNick;
+      io.to(room).emit('updateNickname', { userId: socket.id, newNick });
+      io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
+    }
+  });
+
+  socket.on('disconnect', () => {
+    if (currentRoom && rooms[currentRoom]) {
+      delete rooms[currentRoom].users[socket.id];
+      if (socket.id === rooms[currentRoom].leader) {
+        const userIds = Object.keys(rooms[currentRoom].users);
+        rooms[currentRoom].leader = userIds[0] || null;
+        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
+      }
+      io.to(currentRoom).emit('onlineUsers', Object.values(rooms[currentRoom].users));
+      if (Object.keys(rooms[currentRoom].users).length === 0) {
+        delete rooms[currentRoom];
+      }
+    }
+  });
+});
+
+http.listen(3000, () => {
+  console.log('Server running on port 3000');
+});

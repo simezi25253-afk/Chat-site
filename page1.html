@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Multi-Chat</title>
+  <link rel="stylesheet" href="styles1.css">
+</head>
+<body>
+  <div id="login">
+    <input id="room-name" value="main" placeholder="Room Name"/>
+    <input id="room-password" placeholder="Room Password"/>
+    <input id="nickname" placeholder="Nickname"/>
+    <button id="join-btn">Join</button>
+    <div id="login-error" style="color:red;"></div>
+  </div>
+
+  <div id="chat" style="display:none;">
+    <div>
+      <span id="leader-info"></span>
+      <button id="change-password-btn" style="display:none;">Change Password</button>
+      <input id="new-password" type="password" style="display:none;" placeholder="New Password"/>
+      <button id="confirm-change-password" style="display:none;">Confirm</button>
+    </div>
+    
+    <div>
+      Online: <span id="online-users"></span>
+    </div>
+
+    <div id="messages" style="border:1px solid #ccc; height:300px; overflow-y:auto; margin-top:10px;"></div>
+
+    <input id="message-input" placeholder="Type message..." style="width:80%"/>
+    <button id="send-btn">Send</button>
+
+    <br/>
+    <button id="change-nickname-btn">Change Nickname</button>
+    <input id="nickname-input" placeholder="New Nickname" style="display:none;"/>
+    <button id="nickname-confirm-btn" style="display:none;">Confirm</button>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

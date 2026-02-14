@@ -1,24 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const { Types } = require('mongoose');
 
 // --- 新規登録ルート ---
 router.post('/register', async (req, res) => {
   const { username, password, accessCode } = req.body;
 
-  // アクセスコードが4桁の半角数字かチェック
   if (!/^\d{4}$/.test(accessCode)) {
     return res.status(400).json({ error: 'アクセスコードに使用できるのは半角数字のみです。' });
   }
 
   try {
-    // アクセスコードの重複チェック
     const existingCode = await User.findOne({ accessCode });
     if (existingCode) {
       return res.status(400).json({ error: 'そのアクセスコードはすでに使用されています。' });
     }
 
-    // ユーザー名の重複チェック（任意）
     const existingUser = await User.findOne({ username });
     if (existingUser) {
       return res.status(400).json({ error: 'そのユーザー名はすでに使われています。' });
@@ -38,7 +36,6 @@ router.post('/register', async (req, res) => {
 router.post('/login', async (req, res) => {
   const { accessCode } = req.body;
 
-  // アクセスコードが4桁の半角数字かチェック
   if (!/^\d{4}$/.test(accessCode)) {
     return res.status(400).json({ error: 'アクセスコードに使用できるのは半角数字のみです。' });
   }
@@ -64,11 +61,17 @@ router.get('/me', async (req, res) => {
   }
 
   try {
-    // ✅ 修正ポイント：findById → findOne({ _id }) に変更
+    console.log('セッションのuserId:', req.session.userId);
+
+    if (!Types.ObjectId.isValid(req.session.userId)) {
+      return res.status(400).json({ error: '無効なユーザーIDです' });
+    }
+
     const user = await User.findOne({ _id: req.session.userId });
     if (!user) {
       return res.status(404).json({ error: 'ユーザーが見つかりません' });
     }
+
     res.json({ username: user.username });
   } catch (err) {
     console.error('❌ ユーザー情報取得エラー:', err);

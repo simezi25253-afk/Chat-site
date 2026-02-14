@@ -34,6 +34,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// 🔁 トップページを /login.html にリダイレクト
+app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
+
 // 認証ルート
 app.use('/', authRoutes);
 

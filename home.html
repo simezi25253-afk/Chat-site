@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ホーム | Chat App</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f0f2f5;
+      padding: 2rem;
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    .room-list {
+      margin-top: 1rem;
+    }
+    .room {
+      background: white;
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      border-radius: 6px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+      cursor: pointer;
+    }
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .new-room-btn {
+      padding: 0.5rem 1rem;
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .new-room-btn:hover {
+      background-color: #1976D2;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-bar">
+    <h1 id="welcome">ようこそ！</h1>
+    <button class="new-room-btn" onclick="location.href='/page1.html'">新しいチャットを作成・参加</button>
+  </div>
+
+  <div class="room-list" id="roomList">
+    <h2>参加中のチャットルーム</h2>
+    <div id="rooms"></div>
+  </div>
+
+  <script>
+    async function loadHome() {
+      try {
+        // ユーザー情報を取得
+        const userRes = await fetch('/me');
+        const userData = await userRes.json();
+        if (!userRes.ok) throw new Error(userData.error || 'ユーザー情報の取得に失敗しました');
+        document.getElementById('welcome').textContent = `${userData.username} さん、ようこそ`;
+
+        // ルーム一覧を取得
+        const res = await fetch('/my-rooms');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'ルーム一覧の取得に失敗しました');
+
+        const roomsDiv = document.getElementById('rooms');
+        if (data.rooms.length === 0) {
+          roomsDiv.innerHTML = '<p>まだチャットルームに参加していません。</p>';
+        } else {
+          data.rooms.forEach(room => {
+            const div = document.createElement('div');
+            div.className = 'room';
+            div.textContent = room.name;
+            div.onclick = () => {
+              window.location.href = `/chat.html?roomId=${room._id}`;
+            };
+            roomsDiv.appendChild(div);
+          });
+        }
+      } catch (err) {
+        alert(err.message);
+        window.location.href = '/login.html';
+      }
+    }
+
+    loadHome();
+  </script>
+</body>
+</html>

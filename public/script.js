@@ -24,6 +24,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const nicknameInput = document.getElementById('nickname-input');
   const nicknameConfirmBtn = document.getElementById('nickname-confirm-btn');
 
+  // 接続状態のログ出力
+  socket.on('connect', () => {
+    console.log('✅ Socket connected:', socket.id);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('⚠️ Socket disconnected');
+  });
+
   joinBtn.onclick = () => {
     const room = document.getElementById('room-name').value.trim();
     const password = document.getElementById('room-password').value.trim();
@@ -52,10 +61,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
   sendBtn.onclick = () => {
     const text = msgInput.value.trim();
+    console.log('📤 Sending message:', text);
     if (text === '') return;
     socket.emit('newMessage', { room: currentRoom, text });
     msgInput.value = '';
   };
+
+  // Enterキーで送信、Shift+Enterで改行
+  msgInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendBtn.click();
+    }
+  });
 
   changePasswordBtn.onclick = () => {
     newPasswordInput.style.display = 'inline-block';
@@ -128,6 +146,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   socket.on('newMessage', msg => {
+    console.log('📩 Received message:', msg);
     addMessage(msg);
     scrollMessagesToBottom();
   });

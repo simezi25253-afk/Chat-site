@@ -13,8 +13,10 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+// MongoDB接続
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chat-app');
 
+// ミドルウェア設定
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -23,14 +25,15 @@ const sessionMiddleware = session({
   secret: 'secret-key',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({ mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/chat-app' })
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGODB_URI || 'mongodb://localhost:27017/chat-app'
+  })
 });
 
 app.use(sessionMiddleware);
-
-// Socket.IO でセッションを共有
 io.engine.use(sessionMiddleware);
 
+// ルーティング
 app.use(authRoutes);
 app.use(myRoomsRoutes);
 
@@ -39,6 +42,7 @@ app.get('/chat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
+// メモリ上のルーム管理
 const rooms = {};
 
 io.on('connection', (socket) => {
@@ -129,6 +133,7 @@ io.on('connection', (socket) => {
   });
 });
 
+// サーバー起動
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);

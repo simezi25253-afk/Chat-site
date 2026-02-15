@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>チャットルーム</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .message { margin: 5px 0; }
+    .message .meta { font-size: 0.9em; color: gray; }
+    .delete-btn { margin-left: 10px; color: red; cursor: pointer; }
+    .read-count { font-size: 0.8em; color: #888; margin-left: 8px; }
+  </style>
 </head>
 <body>
   <div id="chat-container">
@@ -32,6 +38,7 @@
 
     document.getElementById('room-name').textContent = `ルーム: ${room}`;
     let leaderId = null;
+    let myUserId = null;
 
     socket.emit('joinRoom', { room, password, nickname }, (res) => {
       if (!res.ok) {
@@ -60,6 +67,9 @@
         const li = document.createElement('li');
         li.textContent = nickname + (userId === leaderId ? ' ⭐' : '');
         list.appendChild(li);
+        if (socket.id === socketId) {
+          myUserId = userId;
+        }
       }
     });
 
@@ -67,12 +77,47 @@
       addMessage(msg);
     });
 
+    socket.on('updateRead', ({ messageId, readCount }) => {
+      const span = document.querySelector(`[data-id="${messageId}"] .read-count`);
+      if (span) span.textContent = `既読 ${readCount}`;
+    });
+
+    socket.on('deleteMessage', ({ messageId }) => {
+      const msgDiv = document.querySelector(`[data-id="${messageId}"]`);
+      if (msgDiv) msgDiv.remove();
+    });
+
     function addMessage(msg) {
       const div = document.createElement('div');
       div.className = 'message';
-      div.innerHTML = `<strong>${msg.nickname}${msg.userId === leaderId ? ' ⭐' : ''}</strong>: ${msg.text}`;
+      div.dataset.id = msg.id;
+
+      const isMine = msg.userId === myUserId;
+      const isLeader = msg.userId === leaderId;
+
+      div.innerHTML = `
+        <strong>${msg.nickname}${isLeader ? ' ⭐' : ''}</strong>: ${msg.text}
+        <span class="meta">
+          ${isMine ? `<span class="read-count">既読 ${msg.readBy.length - 1}</span>` : ''}
+          ${isMine ? `<span class="delete-btn">送信取消</span>` : ''}
+        </span>
+      `;
+
       document.getElementById('messages').appendChild(div);
       div.scrollIntoView();
+
+      if (!isMine) {
+        socket.emit('messageRead', { room, messageId: msg.id });
+      }
+
+      if (isMine) {
+        div.querySelector('.delete-btn').addEventListener('click', () => {
+          const confirmDelete = confirm('送信を取り消しますか？');
+          if (confirmDelete) {
+            socket.emit('deleteMessage', { room, messageId: msg.id });
+          }
+        });
+      }
     }
 
     document.getElementById('message-form').addEventListener('submit', (e) => {

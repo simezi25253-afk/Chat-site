@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="ja">
->
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -58,6 +57,8 @@
         return;
       }
 
+      myUserId = res.userId; // ✅ 自分の userId を取得
+
       if (res.messages) {
         res.messages.forEach(msg => addMessage(msg));
       }
@@ -66,6 +67,8 @@
         document.title += ' ⭐';
         document.getElementById('change-password-btn').style.display = 'inline-block';
       }
+
+      localStorage.setItem('lastRoom', room); // 前回ルーム保存
     });
 
     socket.on('leader', (leader) => {
@@ -80,9 +83,6 @@
         const li = document.createElement('li');
         li.textContent = nickname + (userId === leaderId ? ' ⭐' : '');
         list.appendChild(li);
-        if (socket.request?.session?.userId === userId) {
-          myUserId = userId;
-        }
       }
     });
 
@@ -161,7 +161,6 @@
       }
     });
 
-    // ✅ ホームへ戻るボタンの処理
     document.getElementById('leave-btn').addEventListener('click', () => {
       socket.disconnect(); // 一時退席処理が server.js 側で走る
       window.location.href = '/home.html';

@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     messagesDiv.appendChild(div);
+    observer.observe(div);
   }
 
   socket.on('deleteMessage', ({ messageId }) => {
@@ -166,12 +167,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const scrollMessagesToBottom = () => {
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
-  };
-
-  const originalAddMessage = addMessage;
-  addMessage = (msg) => {
-    originalAddMessage(msg);
-    const el = document.getElementById(msg.id);
-    if (el) observer.observe(el);
   };
 });

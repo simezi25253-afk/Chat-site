@@ -21,19 +21,13 @@
   <script>
     const socket = io();
 
-    // URLパラメータからルーム名とパスワードを取得
     const urlParams = new URLSearchParams(window.location.search);
     const room = urlParams.get('room');
     const password = urlParams.get('password') || '';
 
-    let nickname = localStorage.getItem('nickname');
+    let nickname = prompt('再度入室するにはニックネームを入力してください');
     if (!nickname) {
-      nickname = prompt('再度入室するにはニックネームを入力してください');
-      if (!nickname) {
-        window.location.href = '/home.html';
-      } else {
-        localStorage.setItem('nickname', nickname);
-      }
+      window.location.href = '/home.html';
     }
 
     document.getElementById('room-name').textContent = `ルーム: ${room}`;

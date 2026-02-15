@@ -1,44 +1,168 @@
-<!-- 省略: <head> は前回の chat.html と同じ -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>チャットルーム</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .message { margin: 5px 0; }
+    .message .meta { font-size: 0.9em; color: gray; }
+    .delete-btn { margin-left: 10px; color: red; cursor: pointer; }
+    .read-count { font-size: 0.8em; color: #888; margin-left: 8px; }
+    #change-password-btn, #leave-btn {
+      margin: 5px 5px 10px 0;
+      padding: 5px 10px;
+      background: #444;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="chat-container">
+    <h2 id="room-name"></h2>
+    <button id="change-password-btn">🔒 パスワードを変更</button>
+    <button id="leave-btn">🏠 ホームへ戻る</button>
+    <ul id="user-list"></ul>
+    <div id="messages"></div>
+    <form id="message-form">
+      <input id="message-input" autocomplete="off" placeholder="メッセージを入力..." />
+      <button>送信</button>
+    </form>
+  </div>
 
-<script src="/socket.io/socket.io.js"></script>
-<script>
-  const socket = io();
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const room = urlParams.get('room');
-  const password = urlParams.get('password') || '';
+    const urlParams = new URLSearchParams(window.location.search);
+    const room = urlParams.get('room');
+    const password = urlParams.get('password') || '';
 
-  // ✅ ニックネームを localStorage から取得 or 入力
-  let nickname = localStorage.getItem('nickname') || prompt('ニックネームを入力してください');
-  if (!nickname) {
-    window.location.href = '/home.html';
-  } else {
-    localStorage.setItem('nickname', nickname); // 保存
-  }
-
-  document.getElementById('room-name').textContent = `ルーム: ${room}`;
-  let leaderId = null;
-  let myUserId = null;
-
-  socket.emit('joinRoom', { room, password, nickname }, (res) => {
-    if (!res.ok) {
-      alert(res.error || 'ルーム参加に失敗しました');
+    let nickname = prompt('ニックネームを入力してください');
+    if (!nickname) {
       window.location.href = '/home.html';
-      return;
     }
 
-    myUserId = res.userId;
-    localStorage.setItem('lastRoom', room); // ✅ ルーム名保存
+    document.getElementById('room-name').textContent = `ルーム: ${room}`;
+    let leaderId = null;
+    let myUserId = null;
 
-    if (res.messages) {
-      res.messages.forEach(msg => addMessage(msg));
+    socket.emit('joinRoom', { room, password, nickname }, (res) => {
+      if (!res.ok) {
+        alert(res.error || 'ルーム参加に失敗しました');
+        window.location.href = '/home.html';
+        return;
+      }
+
+      myUserId = res.userId;
+
+      if (res.messages) {
+        res.messages.forEach(msg => addMessage(msg));
+      }
+
+      if (res.isLeader) {
+        document.title += ' ⭐';
+        document.getElementById('change-password-btn').style.display = 'inline-block';
+      }
+    });
+
+    socket.on('leader', (leader) => {
+      leaderId = leader;
+    });
+
+    socket.on('onlineUsers', (userMap) => {
+      const list = document.getElementById('user-list');
+      list.innerHTML = '';
+      for (const userId in userMap) {
+        const { nickname } = userMap[userId];
+        const li = document.createElement('li');
+        li.textContent = nickname + (userId === leaderId ? ' ⭐' : '');
+        list.appendChild(li);
+      }
+    });
+
+    socket.on('newMessage', (msg) => {
+      addMessage(msg);
+    });
+
+    socket.on('updateRead', ({ messageId, readCount }) => {
+      const span = document.querySelector(`[data-id="${messageId}"] .read-count`);
+      if (span) span.textContent = `既読 ${readCount}`;
+    });
+
+    socket.on('deleteMessage', ({ messageId }) => {
+      const msgDiv = document.querySelector(`[data-id="${messageId}"]`);
+      if (msgDiv) msgDiv.remove();
+    });
+
+    socket.on('systemMessage', (text) => {
+      const div = document.createElement('div');
+      div.className = 'message';
+      div.style.color = '#888';
+      div.style.fontStyle = 'italic';
+      div.textContent = text;
+      document.getElementById('messages').appendChild(div);
+      div.scrollIntoView();
+    });
+
+    function addMessage(msg) {
+      const div = document.createElement('div');
+      div.className = 'message';
+      div.dataset.id = msg.id;
+
+      const isMine = msg.userId === myUserId;
+      const isLeader = msg.userId === leaderId;
+
+      div.innerHTML = `
+        <strong>${msg.nickname}${isLeader ? ' ⭐' : ''}</strong>: ${msg.text}
+        <span class="meta">
+          ${isMine ? `<span class="read-count">既読 ${msg.readBy.length - 1}</span>` : ''}
+          ${isMine ? `<span class="delete-btn">送信取消</span>` : ''}
+        </span>
+      `;
+
+      document.getElementById('messages').appendChild(div);
+      div.scrollIntoView();
+
+      if (!isMine) {
+        socket.emit('messageRead', { room, messageId: msg.id });
+      }
+
+      if (isMine) {
+        div.querySelector('.delete-btn').addEventListener('click', () => {
+          const confirmDelete = confirm('送信を取り消しますか？');
+          if (confirmDelete) {
+            socket.emit('deleteMessage', { room, messageId: msg.id });
+          }
+        });
+      }
     }
 
-    if (res.isLeader) {
-      document.title += ' ⭐';
-      document.getElementById('change-password-btn').style.display = 'inline-block';
-    }
-  });
+    document.getElementById('message-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (text) {
+        socket.emit('newMessage', { room, text });
+        input.value = '';
+      }
+    });
 
-  // 以下は前回の chat.html と同じ（省略可能）
-</script>
+    document.getElementById('change-password-btn').addEventListener('click', () => {
+      const newPassword = prompt('新しいパスワードを入力してください');
+      if (newPassword !== null && newPassword.trim() !== '') {
+        socket.emit('changePassword', { room, newPassword });
+        alert('パスワードを変更しました');
+      }
+    });
+
+    document.getElementById('leave-btn').addEventListener('click', () => {
+      socket.disconnect();
+      window.location.href = '/home.html';
+    });
+  </script>
+</body>
+</html>

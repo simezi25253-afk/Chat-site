@@ -2,18 +2,18 @@ const mongoose = require('mongoose');
 
 const messageSchema = new mongoose.Schema({
   id: String,
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // ← ObjectIdに変更
+  userId: mongoose.Schema.Types.ObjectId,
   nickname: String,
   text: String,
   ts: Number,
-  readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  readBy: [String] // ← ここを ObjectId から String に変更！
 });
 
 const roomSchema = new mongoose.Schema({
-  name: { type: String, required: true },
-  password: { type: String },
-  members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  leader: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  name: String,
+  password: String,
+  leader: mongoose.Schema.Types.ObjectId,
+  members: [mongoose.Schema.Types.ObjectId],
   messages: [messageSchema]
 });
 

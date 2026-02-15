@@ -73,7 +73,8 @@ const loadRoomsFromDB = async () => {
         password: r.password,
         users: {},
         messages: r.messages,
-        leader: r.leader
+        leader: r.leader,
+        members: r.members.map(id => id.toString())
       };
     });
     console.log('🔁 MongoDBからルーム情報を復元しました');
@@ -96,7 +97,8 @@ io.on('connection', (socket) => {
         password,
         users: {},
         messages: [],
-        leader: socket.id
+        leader: socket.id,
+        members: [userId]
       };
 
       try {
@@ -113,17 +115,22 @@ io.on('connection', (socket) => {
     } else {
       const savedPassword = rooms[room].password ?? '';
       const inputPassword = password ?? '';
-      if (savedPassword !== '' && String(savedPassword) !== String(inputPassword)) {
+      const isAlreadyMember = rooms[room].members?.includes(userId);
+
+      if (!isAlreadyMember && savedPassword !== '' && String(savedPassword) !== String(inputPassword)) {
         return callback({ ok: false, error: 'Wrong password' });
       }
 
-      try {
-        await Room.updateOne(
-          { name: room },
-          { $addToSet: { members: userId } }
-        );
-      } catch (err) {
-        console.error('❌ メンバー追加失敗:', err);
+      if (!isAlreadyMember) {
+        try {
+          await Room.updateOne(
+            { name: room },
+            { $addToSet: { members: userId } }
+          );
+          rooms[room].members.push(userId);
+        } catch (err) {
+          console.error('❌ メンバー追加失敗:', err);
+        }
       }
     }
 

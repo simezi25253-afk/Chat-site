@@ -11,7 +11,8 @@ router.get('/my-rooms', async (req, res) => {
 
   try {
     const userId = new Types.ObjectId(req.session.userId);
-    const rooms = await Room.find({ members: userId }).select('name _id');
+    // ✅ name, _id, leader を取得
+    const rooms = await Room.find({ members: userId }).select('name _id leader');
     res.json({ rooms });
   } catch (err) {
     console.error('❌ /my-rooms エラー:', err);

@@ -16,6 +16,11 @@
     </form>
   </div>
 
+  <div id="user-list-container">
+    <h3>オンラインユーザー</h3>
+    <ul id="user-list"></ul>
+  </div>
+
   <script>
     const socket = io();
     const urlParams = new URLSearchParams(window.location.search);
@@ -24,6 +29,8 @@
 
     document.getElementById('room-title').textContent = `ルーム: ${room}`;
 
+    let leaderId = null;
+
     socket.emit('joinRoom', { room, password: '', nickname }, (res) => {
       if (!res.ok) {
         alert(res.error || 'ルーム参加に失敗しました');
@@ -31,8 +38,21 @@
         return;
       }
 
-      // 過去のメッセージを表示
       res.messages.forEach(addMessage);
+    });
+
+    socket.on('leader', (id) => {
+      leaderId = id;
+    });
+
+    socket.on('onlineUsers', (nicknames) => {
+      const userList = document.getElementById('user-list');
+      userList.innerHTML = '';
+      for (const [socketId, name] of Object.entries(nicknames)) {
+        const li = document.createElement('li');
+        li.textContent = socketId === leaderId ? `${name} ⭐︎` : name;
+        userList.appendChild(li);
+      }
     });
 
     const form = document.getElementById('message-form');
@@ -55,7 +75,9 @@
     function addMessage(msg) {
       const div = document.createElement('div');
       const time = new Date(msg.ts).toLocaleTimeString();
-      div.textContent = `[${time}] ${msg.nickname}: ${msg.text}`;
+      const isLeader = msg.userId === leaderId;
+      const displayName = isLeader ? `${msg.nickname} ⭐︎` : msg.nickname;
+      div.textContent = `[${time}] ${displayName}: ${msg.text}`;
       messages.appendChild(div);
       messages.scrollTop = messages.scrollHeight;
     }

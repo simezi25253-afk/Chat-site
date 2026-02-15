@@ -110,8 +110,10 @@ io.on('connection', (socket) => {
       } catch (err) {
         console.error('❌ ルーム作成時の保存失敗:', err);
       }
-    } else if (rooms[room].password && rooms[room].password !== password) {
-      // ✅ パスワードが設定されている場合のみチェック
+    } else if (
+      rooms[room].password &&
+      String(rooms[room].password) !== String(password)
+    ) {
       return callback({ ok: false, error: 'Wrong password' });
     } else {
       try {

@@ -23,7 +23,6 @@ mongoose.connect(mongoURI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// ✅ セッション設定
 const sessionMiddleware = session({
   secret: 'your-secret-key',
   resave: false,
@@ -49,21 +48,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 🔁 トップページを /login.html にリダイレクト
 app.get('/', (req, res) => {
   res.redirect('/login.html');
 });
 
-// 認証ルート
 app.use('/', authRoutes);
 app.use('/', myRoomsRoutes);
 
-// ✅ チャットページ（ログイン必須）
 app.get('/chat', requireLogin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
-// ルーム情報の復元
 const rooms = {};
 const loadRoomsFromDB = async () => {
   try {
@@ -72,6 +67,7 @@ const loadRoomsFromDB = async () => {
       rooms[r.name] = {
         password: r.password,
         users: {},
+        userMap: {},
         messages: r.messages,
         leader: r.leader,
         members: r.members.map(id => id.toString())
@@ -96,8 +92,9 @@ io.on('connection', (socket) => {
       rooms[room] = {
         password,
         users: {},
+        userMap: {},
         messages: [],
-        leader: socket.id,
+        leader: userId,
         members: [userId]
       };
 
@@ -136,13 +133,14 @@ io.on('connection', (socket) => {
 
     currentRoom = room;
     rooms[room].users[socket.id] = nickname;
+    rooms[room].userMap[socket.id] = { nickname, userId };
 
     socket.join(room);
     socket.emit('leader', rooms[room].leader);
-    io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
+    io.to(room).emit('onlineUsers', rooms[room].userMap);
     callback({
       ok: true,
-      isLeader: rooms[room].leader === socket.id,
+      isLeader: rooms[room].leader === userId,
       messages: rooms[room].messages
     });
   });
@@ -150,10 +148,13 @@ io.on('connection', (socket) => {
   socket.on('newMessage', async ({ room, text }) => {
     if (!rooms[room]) return;
 
+    const userId = socket.request.session?.userId;
+    const nickname = rooms[room].users[socket.id] || '名無し';
+
     const msg = {
       id: `${Date.now()}-${socket.id}`,
-      userId: socket.request.session?.userId,
-      nickname: rooms[room].users[socket.id],
+      userId,
+      nickname,
       text,
       ts: Date.now(),
       readBy: [socket.id]
@@ -173,65 +174,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('messageRead', ({ room, messageId }) => {
-    const msg = rooms[room]?.messages.find(m => m.id === messageId);
-    if (msg && !msg.readBy.includes(socket.id)) {
-      msg.readBy.push(socket.id);
-      io.to(room).emit('updateRead', {
-        messageId,
-        readCount: msg.readBy.length
-      });
-    }
-  });
-
-  socket.on('deleteMessage', async ({ room, messageId }) => {
-    const index = rooms[room]?.messages.findIndex(
-      m => m.id === messageId && m.userId?.toString() === socket.request.session?.userId
-    );
-    if (index !== -1 && index !== undefined) {
-      rooms[room].messages.splice(index, 1);
-      io.to(room).emit('deleteMessage', { messageId });
-
-      try {
-        await Room.updateOne(
-          { name: room },
-          { $pull: { messages: { id: messageId, userId: socket.request.session?.userId } } }
-        );
-      } catch (err) {
-        console.error('❌ MongoDBからのメッセージ削除に失敗:', err);
-      }
-    }
-  });
-
-  socket.on('changePassword', ({ room, newPassword }) => {
-    if (rooms[room]?.leader === socket.id) {
-      rooms[room].password = newPassword;
-    }
-  });
-
-  socket.on('changeNickname', ({ room, newNick }) => {
-    if (rooms[room]?.users[socket.id]) {
-      rooms[room].users[socket.id] = newNick;
-      io.to(room).emit('updateNickname', {
-        userId: socket.id,
-        newNick
-      });
-      io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
-    }
-  });
-
   socket.on('disconnect', () => {
     if (currentRoom && rooms[currentRoom]) {
       delete rooms[currentRoom].users[socket.id];
-      if (socket.id === rooms[currentRoom].leader) {
-        const userIds = Object.keys(rooms[currentRoom].users);
-        rooms[currentRoom].leader = userIds[0] || null;
-        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
-      }
-      io.to(currentRoom).emit('onlineUsers', Object.values(rooms[currentRoom].users));
-      if (Object.keys(rooms[currentRoom].users).length === 0) {
-        delete rooms[currentRoom];
-      }
+      delete rooms[currentRoom].userMap[socket.id];
+      io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
     }
   });
 });

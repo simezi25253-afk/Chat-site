@@ -110,12 +110,13 @@ io.on('connection', (socket) => {
       } catch (err) {
         console.error('❌ ルーム作成時の保存失敗:', err);
       }
-    } else if (
-      rooms[room].password &&
-      String(rooms[room].password) !== String(password)
-    ) {
-      return callback({ ok: false, error: 'Wrong password' });
     } else {
+      const savedPassword = rooms[room].password ?? '';
+      const inputPassword = password ?? '';
+      if (savedPassword !== '' && String(savedPassword) !== String(inputPassword)) {
+        return callback({ ok: false, error: 'Wrong password' });
+      }
+
       try {
         await Room.updateOne(
           { name: room },

@@ -58,9 +58,9 @@ app.get('/', (req, res) => {
 app.use('/', authRoutes);
 app.use('/', myRoomsRoutes);
 
-// チャットページ（ログイン必須）
+// ✅ チャットページ（ログイン必須）→ /chat にルーティング
 app.get('/chat', requireLogin, (req, res) => {
-  res.sendFile(__dirname + '/public/chat.html');
+  res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
 // ルーム情報の復元

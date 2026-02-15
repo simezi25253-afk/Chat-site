@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ja">
+>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -10,9 +11,8 @@
     .message .meta { font-size: 0.9em; color: gray; }
     .delete-btn { margin-left: 10px; color: red; cursor: pointer; }
     .read-count { font-size: 0.8em; color: #888; margin-left: 8px; }
-    #change-password-btn {
-      display: none;
-      margin-bottom: 10px;
+    #change-password-btn, #leave-btn {
+      margin: 5px 5px 10px 0;
       padding: 5px 10px;
       background: #444;
       color: white;
@@ -25,6 +25,7 @@
   <div id="chat-container">
     <h2 id="room-name"></h2>
     <button id="change-password-btn">🔒 パスワードを変更</button>
+    <button id="leave-btn">🏠 ホームへ戻る</button>
     <ul id="user-list"></ul>
     <div id="messages"></div>
     <form id="message-form">
@@ -158,6 +159,12 @@
         socket.emit('changePassword', { room, newPassword });
         alert('パスワードを変更しました');
       }
+    });
+
+    // ✅ ホームへ戻るボタンの処理
+    document.getElementById('leave-btn').addEventListener('click', () => {
+      socket.disconnect(); // 一時退席処理が server.js 側で走る
+      window.location.href = '/home.html';
     });
   </script>
 </body>

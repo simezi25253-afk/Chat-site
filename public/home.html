@@ -10,15 +10,17 @@
       font-family: sans-serif;
       padding: 20px;
     }
-    form {
+    h1 {
+      margin-bottom: 10px;
+    }
+    .room-list {
       margin-top: 20px;
     }
-    input {
-      padding: 8px;
-      margin: 5px;
-      width: 200px;
+    .room-item {
+      margin: 5px 0;
     }
     button {
+      margin: 10px 10px 0 0;
       padding: 8px 16px;
       background: #2c3e50;
       color: white;
@@ -28,12 +30,44 @@
   </style>
 </head>
 <body>
-  <h1>ようこそ！</h1>
+  <h1 id="welcome-msg">ようこそ！</h1>
 
-  <form id="join-form" action="/chat" method="GET">
-    <input type="text" name="room" placeholder="ルーム名" required />
-    <input type="text" name="password" placeholder="パスワード（必要な場合）" />
-    <button type="submit">ルームに参加</button>
-  </form>
+  <div>
+    <button onclick="location.href='/create.html'">➕ ルーム新規作成</button>
+    <button onclick="location.href='/join.html'">🔑 ルームに参加</button>
+  </div>
+
+  <div class="room-list">
+    <h2>参加中のルーム一覧</h2>
+    <ul id="room-list"></ul>
+  </div>
+
+  <script>
+    // ユーザー名を取得して表示
+    fetch('/api/user')
+      .then(res => res.json())
+      .then(data => {
+        if (data.username) {
+          document.getElementById('welcome-msg').textContent = `${data.username} 様、ようこそ`;
+        }
+      });
+
+    // 参加中のルーム一覧を取得
+    fetch('/my-rooms')
+      .then(res => res.json())
+      .then(data => {
+        const list = document.getElementById('room-list');
+        if (data.rooms && data.rooms.length > 0) {
+          data.rooms.forEach(room => {
+            const li = document.createElement('li');
+            li.className = 'room-item';
+            li.innerHTML = `<a href="/chat.html?room=${encodeURIComponent(room.name)}">${room.name}</a>`;
+            list.appendChild(li);
+          });
+        } else {
+          list.innerHTML = '<li>参加中のルームはありません</li>';
+        }
+      });
+  </script>
 </body>
 </html>

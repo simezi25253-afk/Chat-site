@@ -132,7 +132,7 @@ io.on('connection', (socket) => {
 
     currentRoom = room;
     rooms[room].users[socket.id] = nickname;
-    rooms[room].userMap[socket.id] = { nickname, userId };
+    rooms[room].userMap[userId] = { nickname, userId };
 
     socket.join(room);
     socket.emit('leader', rooms[room].leader);
@@ -213,8 +213,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (currentRoom && rooms[currentRoom]) {
       const nickname = rooms[currentRoom].users[socket.id];
+      const userId = socket.request.session?.userId;
+
       delete rooms[currentRoom].users[socket.id];
-      delete rooms[currentRoom].userMap[socket.id];
+      delete rooms[currentRoom].userMap[userId];
 
       if (nickname) {
         io.to(currentRoom).emit('systemMessage', `${nickname} が一時退席しました`);
@@ -222,13 +224,13 @@ io.on('connection', (socket) => {
 
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
 
-      if (socket.id === rooms[currentRoom].leader) {
-        const userIds = Object.keys(rooms[currentRoom].users);
-        rooms[currentRoom].leader = userIds[0] || null;
+      if (userId === rooms[currentRoom].leader) {
+        const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
+        rooms[currentRoom].leader = remainingUserIds[0] || null;
         io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
       }
 
-      if (Object.keys(rooms[currentRoom].users).length === 0) {
+      if (Object.keys(rooms[currentRoom].userMap).length === 0) {
         delete rooms[currentRoom];
       }
     }

@@ -120,14 +120,21 @@ io.on('connection', (socket) => {
       ok: true,
       isLeader: rooms[room].leader === userId,
       messages: rooms[room].messages,
-      userId // ✅ ここが今回の追加ポイント！
+      userId
     });
   });
 
   socket.on('newMessage', async ({ room, text }) => {
-    if (!rooms[room]) return;
+    console.log(`📨 [newMessage] from ${socket.id} in room "${room}": ${text}`);
+
+    if (!rooms[room]) {
+      console.warn(`⚠️ Room "${room}" not found`);
+      return;
+    }
+
     const userId = socket.request.session?.userId;
     const nickname = rooms[room].users[socket.id] || '名無し';
+
     const msg = {
       id: `${Date.now()}-${socket.id}`,
       userId,
@@ -136,9 +143,12 @@ io.on('connection', (socket) => {
       ts: Date.now(),
       readBy: [socket.id]
     };
+
     rooms[room].messages.push(msg);
     io.to(room).emit('newMessage', msg);
     await Room.updateOne({ name: room }, { $push: { messages: msg } }, { upsert: true });
+
+    console.log(`✅ [newMessage] broadcasted to room "${room}"`);
   });
 
   socket.on('messageRead', ({ room, messageId }) => {
@@ -198,5 +208,5 @@ io.on('connection', (socket) => {
 // サーバー起動
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });

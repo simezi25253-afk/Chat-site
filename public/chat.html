@@ -2,69 +2,64 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>チャットルーム</title>
-  <link rel="stylesheet" href="/style.css" />
-  <script src="/socket.io/socket.io.js"></script>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1 id="room-title">チャットルーム</h1>
   <div id="chat-container">
+    <h2 id="room-name"></h2>
+    <ul id="user-list"></ul>
     <div id="messages"></div>
     <form id="message-form">
-      <input type="text" id="message-input" placeholder="メッセージを入力..." autocomplete="off" required />
-      <button type="submit">送信</button>
+      <input id="message-input" autocomplete="off" placeholder="メッセージを入力..." />
+      <button>送信</button>
     </form>
   </div>
 
-  <div id="user-list-container">
-    <h3>オンラインユーザー</h3>
-    <ul id="user-list"></ul>
-  </div>
-
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
+
+    // URLパラメータからルーム名を取得
     const urlParams = new URLSearchParams(window.location.search);
     const room = urlParams.get('room');
-    const nickname = localStorage.getItem('nickname') || '名無し';
+    const password = urlParams.get('password') || '';
+    let nickname = localStorage.getItem('nickname') || prompt('ニックネームを入力してください');
+    if (!nickname) nickname = '名無し';
+    localStorage.setItem('nickname', nickname);
 
-    document.getElementById('room-title').textContent = `ルーム: ${room}`;
+    document.getElementById('room-name').textContent = `ルーム: ${room}`;
 
     let leaderId = null;
 
-    socket.emit('joinRoom', { room, password: '', nickname }, (res) => {
+    socket.emit('joinRoom', { room, password, nickname }, (res) => {
       if (!res.ok) {
         alert(res.error || 'ルーム参加に失敗しました');
         window.location.href = '/home.html';
         return;
       }
 
-      res.messages.forEach(addMessage);
-    });
+      if (res.messages) {
+        res.messages.forEach(msg => addMessage(msg));
+      }
 
-    socket.on('leader', (id) => {
-      leaderId = id;
-    });
-
-    socket.on('onlineUsers', (nicknames) => {
-      const userList = document.getElementById('user-list');
-      userList.innerHTML = '';
-      for (const [socketId, name] of Object.entries(nicknames)) {
-        const li = document.createElement('li');
-        li.textContent = socketId === leaderId ? `${name} ⭐︎` : name;
-        userList.appendChild(li);
+      if (res.isLeader) {
+        document.title += ' ⭐';
       }
     });
 
-    const form = document.getElementById('message-form');
-    const input = document.getElementById('message-input');
-    const messages = document.getElementById('messages');
+    socket.on('leader', (leader) => {
+      leaderId = leader;
+    });
 
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      const text = input.value.trim();
-      if (text) {
-        socket.emit('newMessage', { room, text });
-        input.value = '';
+    socket.on('onlineUsers', (userMap) => {
+      const list = document.getElementById('user-list');
+      list.innerHTML = '';
+      for (const [socketId, { nickname, userId }] of Object.entries(userMap)) {
+        const li = document.createElement('li');
+        li.textContent = nickname + (userId === leaderId ? ' ⭐' : '');
+        list.appendChild(li);
       }
     });
 
@@ -74,13 +69,21 @@
 
     function addMessage(msg) {
       const div = document.createElement('div');
-      const time = new Date(msg.ts).toLocaleTimeString();
-      const isLeader = msg.userId === leaderId;
-      const displayName = isLeader ? `${msg.nickname} ⭐︎` : msg.nickname;
-      div.textContent = `[${time}] ${displayName}: ${msg.text}`;
-      messages.appendChild(div);
-      messages.scrollTop = messages.scrollHeight;
+      div.className = 'message';
+      div.innerHTML = `<strong>${msg.nickname}${msg.userId === leaderId ? ' ⭐' : ''}</strong>: ${msg.text}`;
+      document.getElementById('messages').appendChild(div);
+      div.scrollIntoView();
     }
+
+    document.getElementById('message-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = document.getElementById('message-input');
+      const text = input.value.trim();
+      if (text) {
+        socket.emit('newMessage', { room, text });
+        input.value = '';
+      }
+    });
   </script>
 </body>
 </html>

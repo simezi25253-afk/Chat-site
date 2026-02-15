@@ -21,16 +21,22 @@
   <script>
     const socket = io();
 
-    // URLパラメータからルーム名を取得
+    // URLパラメータからルーム名とパスワードを取得
     const urlParams = new URLSearchParams(window.location.search);
     const room = urlParams.get('room');
     const password = urlParams.get('password') || '';
-    let nickname = localStorage.getItem('nickname') || prompt('ニックネームを入力してください');
-    if (!nickname) nickname = '名無し';
-    localStorage.setItem('nickname', nickname);
+
+    let nickname = localStorage.getItem('nickname');
+    if (!nickname) {
+      nickname = prompt('再度入室するにはニックネームを入力してください');
+      if (!nickname) {
+        window.location.href = '/home.html';
+      } else {
+        localStorage.setItem('nickname', nickname);
+      }
+    }
 
     document.getElementById('room-name').textContent = `ルーム: ${room}`;
-
     let leaderId = null;
 
     socket.emit('joinRoom', { room, password, nickname }, (res) => {

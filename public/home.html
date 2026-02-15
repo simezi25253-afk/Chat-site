@@ -57,7 +57,7 @@
   <script>
     async function loadHome() {
       try {
-        // ✅ ユーザー情報を取得（セッションCookieを送信）
+        // ✅ ユーザー情報を取得
         const userRes = await fetch('/me', {
           method: 'GET',
           credentials: 'include'
@@ -66,7 +66,9 @@
         if (!userRes.ok) throw new Error(userData.error || 'ユーザー情報の取得に失敗しました');
         document.getElementById('welcome').textContent = `${userData.username} さん、ようこそ`;
 
-        // ✅ ルーム一覧を取得（セッションが必要なら credentials: 'include' を追加）
+        const myUserId = userData.userId; // ⭐️ 自分のIDを取得
+
+        // ✅ ルーム一覧を取得
         const res = await fetch('/my-rooms', {
           method: 'GET',
           credentials: 'include'
@@ -81,9 +83,14 @@
           data.rooms.forEach(room => {
             const div = document.createElement('div');
             div.className = 'room';
-            div.textContent = room.name;
+
+            // ⭐️ 自分がリーダーならマークをつける
+            const isLeader = room.leader === myUserId;
+            const displayName = isLeader ? `⭐︎ ${room.name}` : room.name;
+
+            div.textContent = displayName;
             div.onclick = () => {
-              window.location.href = `/chat.html?roomId=${room._id}`;
+              window.location.href = `/chat?room=${encodeURIComponent(room.name)}`;
             };
             roomsDiv.appendChild(div);
           });

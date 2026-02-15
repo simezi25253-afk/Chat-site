@@ -7,9 +7,9 @@ const mongoose = require('mongoose');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const authRoutes = require('./routes/auth');
-const myRoomsRoutes = require('./routes/myRooms'); // ✅ 追加
+const myRoomsRoutes = require('./routes/myRooms');
 const requireLogin = require('./middleware/auth');
-const Room = require('./models/Room'); // ✅ Roomモデルを外部から読み込み
+const Room = require('./models/Room');
 
 // MongoDBの接続URI
 const mongoURI = 'mongodb+srv://simezi25253:DJAtPESi3iluSnab@chat-site-app.quoghij.mongodb.net/?retryWrites=true&w=majority';
@@ -23,8 +23,8 @@ mongoose.connect(mongoURI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// ✅ セッション設定（修正版）
-app.use(session({
+// ✅ セッション設定（Express & Socket.IO 両方で使えるように）
+const sessionMiddleware = session({
   secret: 'your-secret-key',
   resave: false,
   saveUninitialized: false,
@@ -33,12 +33,17 @@ app.use(session({
     collectionName: 'sessions'
   }),
   cookie: {
-    maxAge: 1000 * 60 * 60, // 1時間
+    maxAge: 1000 * 60 * 60,
     sameSite: 'lax',
     secure: false,
     httpOnly: true
   }
-}));
+});
+
+app.use(sessionMiddleware);
+io.use((socket, next) => {
+  sessionMiddleware(socket.request, {}, next);
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -51,7 +56,7 @@ app.get('/', (req, res) => {
 
 // 認証ルート
 app.use('/', authRoutes);
-app.use('/', myRoomsRoutes); // ✅ 追加
+app.use('/', myRoomsRoutes);
 
 // チャットページ（ログイン必須）
 app.get('/chat', requireLogin, (req, res) => {
@@ -82,7 +87,10 @@ loadRoomsFromDB();
 io.on('connection', (socket) => {
   let currentRoom = null;
 
-  socket.on('joinRoom', ({ room, password, nickname }, callback) => {
+  socket.on('joinRoom', async ({ room, password, nickname }, callback) => {
+    const userId = socket.request.session?.userId;
+    if (!userId) return callback({ ok: false, error: 'ログイン情報が見つかりません' });
+
     if (!rooms[room]) {
       rooms[room] = {
         password,
@@ -90,8 +98,29 @@ io.on('connection', (socket) => {
         messages: [],
         leader: socket.id
       };
+
+      try {
+        await Room.create({
+          name: room,
+          password,
+          leader: userId,
+          members: [userId],
+          messages: []
+        });
+      } catch (err) {
+        console.error('❌ ルーム作成時の保存失敗:', err);
+      }
     } else if (rooms[room].password !== password) {
       return callback({ ok: false, error: 'Wrong password' });
+    } else {
+      try {
+        await Room.updateOne(
+          { name: room },
+          { $addToSet: { members: userId } }
+        );
+      } catch (err) {
+        console.error('❌ メンバー追加失敗:', err);
+      }
     }
 
     currentRoom = room;
@@ -112,7 +141,7 @@ io.on('connection', (socket) => {
 
     const msg = {
       id: `${Date.now()}-${socket.id}`,
-      userId: socket.id,
+      userId: socket.request.session?.userId,
       nickname: rooms[room].users[socket.id],
       text,
       ts: Date.now(),
@@ -146,7 +175,7 @@ io.on('connection', (socket) => {
 
   socket.on('deleteMessage', async ({ room, messageId }) => {
     const index = rooms[room]?.messages.findIndex(
-      m => m.id === messageId && m.userId === socket.id
+      m => m.id === messageId && m.userId?.toString() === socket.request.session?.userId
     );
     if (index !== -1 && index !== undefined) {
       rooms[room].messages.splice(index, 1);
@@ -155,7 +184,7 @@ io.on('connection', (socket) => {
       try {
         await Room.updateOne(
           { name: room },
-          { $pull: { messages: { id: messageId, userId: socket.id } } }
+          { $pull: { messages: { id: messageId, userId: socket.request.session?.userId } } }
         );
       } catch (err) {
         console.error('❌ MongoDBからのメッセージ削除に失敗:', err);

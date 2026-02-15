@@ -6,9 +6,19 @@
   <title>ホーム</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    #resume-btn {
-      display: none;
-      margin-top: 10px;
+    body {
+      font-family: sans-serif;
+      padding: 20px;
+    }
+    form {
+      margin-top: 20px;
+    }
+    input {
+      padding: 8px;
+      margin: 5px;
+      width: 200px;
+    }
+    button {
       padding: 8px 16px;
       background: #2c3e50;
       color: white;
@@ -25,18 +35,5 @@
     <input type="text" name="password" placeholder="パスワード（必要な場合）" />
     <button type="submit">ルームに参加</button>
   </form>
-
-  <button id="resume-btn">🔄 前回のルームに戻る</button>
-
-  <script>
-    const lastRoom = localStorage.getItem('lastRoom');
-    if (lastRoom) {
-      const btn = document.getElementById('resume-btn');
-      btn.style.display = 'inline-block';
-      btn.addEventListener('click', () => {
-        window.location.href = `/chat.html?room=${encodeURIComponent(lastRoom)}`;
-      });
-    }
-  </script>
 </body>
 </html>

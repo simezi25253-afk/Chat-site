@@ -1,105 +1,21 @@
-const express = require('express');
-const app = express();
-const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-const path = require('path');
-const mongoose = require('mongoose');
-const session = require('express-session');
-const MongoStore = require('connect-mongo');
-const authRoutes = require('./routes/auth');
-const myRoomsRoutes = require('./routes/myRooms');
-const requireLogin = require('./middleware/auth');
-const Room = require('./models/Room');
-
-// MongoDBの接続URI
-const mongoURI = 'mongodb+srv://simezi25253:DJAtPESi3iluSnab@chat-site-app.quoghij.mongodb.net/?retryWrites=true&w=majority';
-
-mongoose.connect(mongoURI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-}).then(() => {
-  console.log('✅ Connected to MongoDB');
-}).catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-});
-
-// ✅ セッション設定（Express & Socket.IO 両方で使えるように）
-const sessionMiddleware = session({
-  secret: 'your-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: mongoURI,
-    collectionName: 'sessions'
-  }),
-  cookie: {
-    maxAge: 1000 * 60 * 60,
-    sameSite: 'lax',
-    secure: false,
-    httpOnly: true
-  }
-});
-
-app.use(sessionMiddleware);
-io.use((socket, next) => {
-  sessionMiddleware(socket.request, {}, next);
-});
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
-
-// 🔁 トップページを /login.html にリダイレクト
-app.get('/', (req, res) => {
-  res.redirect('/login.html');
-});
-
-// 認証ルート
-app.use('/', authRoutes);
-app.use('/', myRoomsRoutes);
-
-// ✅ チャットページ（ログイン必須）→ /chat にルーティング
-app.get('/chat', requireLogin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'chat.html'));
-});
-
-// ルーム情報の復元
-const rooms = {};
-const loadRoomsFromDB = async () => {
-  try {
-    const allRooms = await Room.find({});
-    allRooms.forEach(r => {
-      rooms[r.name] = {
-        password: r.password,
-        users: {},
-        messages: r.messages,
-        leader: r.leader
-      };
-    });
-    console.log('🔁 MongoDBからルーム情報を復元しました');
-  } catch (err) {
-    console.error('❌ MongoDBからの読み込みに失敗:', err);
-  }
-};
-
-loadRoomsFromDB();
-
 io.on('connection', (socket) => {
-  let currentRoom = null;
-
   socket.on('joinRoom', async ({ room, password, nickname }, callback) => {
-    const userId = socket.request.session?.userId;
-    if (!userId) return callback({ ok: false, error: 'ログイン情報が見つかりません' });
+    try {
+      const userId = socket.request.session.userId;
+      if (!userId) return callback({ ok: false, error: 'ログインしていません' });
 
-    if (!rooms[room]) {
-      rooms[room] = {
-        password,
-        users: {},
-        messages: [],
-        leader: socket.id
-      };
+      if (!rooms[room]) {
+        // 新規ルーム作成
+        rooms[room] = {
+          password,
+          leader: socket.id,
+          members: new Set([socket.id]),
+          messages: [],
+          userMap: { [socket.id]: nickname },
+          userIdMap: { [socket.id]: userId }
+        };
 
-      try {
+        // MongoDBにも保存
         await Room.create({
           name: room,
           password,
@@ -107,125 +23,39 @@ io.on('connection', (socket) => {
           members: [userId],
           messages: []
         });
-      } catch (err) {
-        console.error('❌ ルーム作成時の保存失敗:', err);
-      }
-    } else if (rooms[room].password !== password) {
-      return callback({ ok: false, error: 'Wrong password' });
-    } else {
-      try {
+      } else {
+        // ✅ パスワードが設定されている場合のみチェック
+        if (rooms[room].password && rooms[room].password !== password) {
+          return callback({ ok: false, error: 'Wrong password' });
+        }
+
+        rooms[room].members.add(socket.id);
+        rooms[room].userMap[socket.id] = nickname;
+        rooms[room].userIdMap[socket.id] = userId;
+
+        // MongoDBにもメンバー追加（重複チェック付き）
         await Room.updateOne(
           { name: room },
           { $addToSet: { members: userId } }
         );
-      } catch (err) {
-        console.error('❌ メンバー追加失敗:', err);
       }
-    }
 
-    currentRoom = room;
-    rooms[room].users[socket.id] = nickname;
+      socket.join(room);
+      socket.room = room;
 
-    socket.join(room);
-    socket.emit('leader', rooms[room].leader);
-    io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
-    callback({
-      ok: true,
-      isLeader: rooms[room].leader === socket.id,
-      messages: rooms[room].messages
-    });
-  });
+      // クライアントにリーダーIDを通知
+      socket.emit('leader', rooms[room].leader);
 
-  socket.on('newMessage', async ({ room, text }) => {
-    if (!rooms[room]) return;
+      // オンラインユーザー一覧を送信
+      io.to(room).emit('onlineUsers', rooms[room].userMap);
 
-    const msg = {
-      id: `${Date.now()}-${socket.id}`,
-      userId: socket.request.session?.userId,
-      nickname: rooms[room].users[socket.id],
-      text,
-      ts: Date.now(),
-      readBy: [socket.id]
-    };
-
-    rooms[room].messages.push(msg);
-    io.to(room).emit('newMessage', msg);
-
-    try {
-      await Room.updateOne(
-        { name: room },
-        { $push: { messages: msg } },
-        { upsert: true }
-      );
+      // 過去のメッセージを返す
+      callback({ ok: true, messages: rooms[room].messages });
     } catch (err) {
-      console.error('❌ MongoDBへの保存に失敗:', err);
+      console.error('❌ joinRoom エラー:', err);
+      callback({ ok: false, error: 'ルーム参加に失敗しました' });
     }
   });
 
-  socket.on('messageRead', ({ room, messageId }) => {
-    const msg = rooms[room]?.messages.find(m => m.id === messageId);
-    if (msg && !msg.readBy.includes(socket.id)) {
-      msg.readBy.push(socket.id);
-      io.to(room).emit('updateRead', {
-        messageId,
-        readCount: msg.readBy.length
-      });
-    }
-  });
-
-  socket.on('deleteMessage', async ({ room, messageId }) => {
-    const index = rooms[room]?.messages.findIndex(
-      m => m.id === messageId && m.userId?.toString() === socket.request.session?.userId
-    );
-    if (index !== -1 && index !== undefined) {
-      rooms[room].messages.splice(index, 1);
-      io.to(room).emit('deleteMessage', { messageId });
-
-      try {
-        await Room.updateOne(
-          { name: room },
-          { $pull: { messages: { id: messageId, userId: socket.request.session?.userId } } }
-        );
-      } catch (err) {
-        console.error('❌ MongoDBからのメッセージ削除に失敗:', err);
-      }
-    }
-  });
-
-  socket.on('changePassword', ({ room, newPassword }) => {
-    if (rooms[room]?.leader === socket.id) {
-      rooms[room].password = newPassword;
-    }
-  });
-
-  socket.on('changeNickname', ({ room, newNick }) => {
-    if (rooms[room]?.users[socket.id]) {
-      rooms[room].users[socket.id] = newNick;
-      io.to(room).emit('updateNickname', {
-        userId: socket.id,
-        newNick
-      });
-      io.to(room).emit('onlineUsers', Object.values(rooms[room].users));
-    }
-  });
-
-  socket.on('disconnect', () => {
-    if (currentRoom && rooms[currentRoom]) {
-      delete rooms[currentRoom].users[socket.id];
-      if (socket.id === rooms[currentRoom].leader) {
-        const userIds = Object.keys(rooms[currentRoom].users);
-        rooms[currentRoom].leader = userIds[0] || null;
-        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
-      }
-      io.to(currentRoom).emit('onlineUsers', Object.values(rooms[currentRoom].users));
-      if (Object.keys(rooms[currentRoom].users).length === 0) {
-        delete rooms[currentRoom];
-      }
-    }
-  });
-});
-
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  // 他のイベント（newMessage, disconnectなど）もここに続く…
 });

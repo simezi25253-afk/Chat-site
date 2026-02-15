@@ -74,11 +74,12 @@
     socket.on('onlineUsers', (userMap) => {
       const list = document.getElementById('user-list');
       list.innerHTML = '';
-      for (const [socketId, { nickname, userId }] of Object.entries(userMap)) {
+      for (const userId in userMap) {
+        const { nickname } = userMap[userId];
         const li = document.createElement('li');
         li.textContent = nickname + (userId === leaderId ? ' ⭐' : '');
         list.appendChild(li);
-        if (socket.id === socketId) {
+        if (socket.request?.session?.userId === userId) {
           myUserId = userId;
         }
       }
@@ -151,7 +152,6 @@
       }
     });
 
-    // ✅ パスワード変更ボタンの処理（リーダーのみ）
     document.getElementById('change-password-btn').addEventListener('click', () => {
       const newPassword = prompt('新しいパスワードを入力してください');
       if (newPassword !== null && newPassword.trim() !== '') {

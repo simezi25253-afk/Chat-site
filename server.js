@@ -1,4 +1,3 @@
-// 必要なモジュールの読み込み
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -146,7 +145,12 @@ io.on('connection', (socket) => {
 
     rooms[room].messages.push(msg);
     io.to(room).emit('newMessage', msg);
-    await Room.updateOne({ name: room }, { $push: { messages: msg } }, { upsert: true });
+
+    try {
+      await Room.updateOne({ name: room }, { $push: { messages: msg } }, { upsert: true });
+    } catch (err) {
+      console.error('❌ Failed to save message to DB:', err);
+    }
 
     console.log(`✅ [newMessage] broadcasted to room "${room}"`);
   });
@@ -184,20 +188,34 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
+    console.log(`⚠️ [disconnect] socket ${socket.id} disconnected`);
+    console.log('currentRoom:', currentRoom);
+    console.log('session userId:', socket.request.session?.userId);
+
     if (currentRoom && rooms[currentRoom]) {
       const nickname = rooms[currentRoom].users[socket.id];
       const userId = socket.request.session?.userId;
+
+      console.log('nickname:', nickname);
+      console.log('userId:', userId);
+
       delete rooms[currentRoom].users[socket.id];
-      delete rooms[currentRoom].userMap[userId];
+      if (userId && rooms[currentRoom].userMap[userId]) {
+        delete rooms[currentRoom].userMap[userId];
+      }
+
       if (nickname) {
         io.to(currentRoom).emit('systemMessage', `${nickname} が一時退席しました`);
       }
+
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
+
       if (userId === rooms[currentRoom].leader) {
         const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
         rooms[currentRoom].leader = remainingUserIds[0] || null;
         io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
       }
+
       if (Object.keys(rooms[currentRoom].userMap).length === 0) {
         delete rooms[currentRoom];
       }

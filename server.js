@@ -55,7 +55,7 @@ app.get('/chat', requireLogin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
-// 🔽 追加：チャット作成時のセッション保存
+// チャット作成時のセッション保存
 app.post('/join-room', (req, res) => {
   const { room, password, nickname } = req.body;
   if (!room || !nickname) return res.json({ ok: false, error: 'ルーム名とニックネームは必須です' });
@@ -71,7 +71,7 @@ app.post('/join-room', (req, res) => {
   res.json({ ok: true });
 });
 
-// 🔽 追加：セッション情報取得API
+// セッション情報取得API
 app.get('/session-info', (req, res) => {
   res.json({
     userId: req.session.userId,
@@ -81,7 +81,7 @@ app.get('/session-info', (req, res) => {
   });
 });
 
-// 🔽 追加：ルーム名とパスワードの一致確認
+// ルーム名とパスワードの一致確認
 app.post('/check-room', async (req, res) => {
   const { room, password } = req.body;
   if (!room || !password) {
@@ -233,18 +233,10 @@ io.on('connection', (socket) => {
       const nickname = rooms[currentRoom].users[socket.id];
       const userId = socket.request.session?.userId;
 
-      console.log('nickname:', nickname);
-      console.log('userId:', userId);
-
       delete rooms[currentRoom].users[socket.id];
       if (userId && rooms[currentRoom].userMap[userId]) {
         delete rooms[currentRoom].userMap[userId];
       }
 
       if (nickname) {
-        io.to(currentRoom).emit('systemMessage', `${nickname} が一時退席しました`);
-      }
-
-      io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
-
-      if (userId === rooms[currentRoom].leader
+        io.to

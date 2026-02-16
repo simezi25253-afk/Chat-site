@@ -1,42 +1,49 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Multi-Chat</title>
+  <meta charset="UTF-8">
+  <title>チャット作成</title>
   <link rel="stylesheet" href="styles1.css">
 </head>
 <body>
   <div id="login">
-    <input id="room-name" value="main" placeholder="Room Name"/>
-    <input id="room-password" placeholder="Room Password"/>
-    <input id="nickname" placeholder="Nickname"/>
-    <button id="join-btn">Join</button>
-    <div id="login-error" style="color:red;"></div>
+    <h2>新しいチャットルームを作成</h2>
+    <input id="room-name" placeholder="ルーム名" />
+    <input id="room-password" placeholder="パスワード（任意）" />
+    <input id="nickname" placeholder="ニックネーム" />
+    <button id="join-btn">チャット作成</button>
+    <div id="login-error" style="color:red; margin-top:10px;"></div>
   </div>
 
-  <div id="chat" style="display:none;">
-    <div>
-      <span id="leader-info"></span>
-      <button id="change-password-btn" style="display:none;">Change Password</button>
-      <input id="new-password" type="password" style="display:none;" placeholder="New Password"/>
-      <button id="confirm-change-password" style="display:none;">Confirm</button>
-    </div>
-    
-    <div>
-      Online: <span id="online-users"></span>
-    </div>
+  <script>
+    document.getElementById('join-btn').addEventListener('click', () => {
+      const room = document.getElementById('room-name').value.trim();
+      const password = document.getElementById('room-password').value.trim();
+      const nickname = document.getElementById('nickname').value.trim();
 
-    <div id="messages" style="border:1px solid #ccc; height:300px; overflow-y:auto; margin-top:10px;"></div>
+      if (!room || !nickname) {
+        document.getElementById('login-error').textContent = 'ルーム名とニックネームは必須です。';
+        return;
+      }
 
-    <input id="message-input" placeholder="Type message..." style="width:80%"/>
-    <button id="send-btn">Send</button>
-
-    <br/>
-    <button id="change-nickname-btn">Change Nickname</button>
-    <input id="nickname-input" placeholder="New Nickname" style="display:none;"/>
-    <button id="nickname-confirm-btn" style="display:none;">Confirm</button>
-  </div>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js"></script>
+      fetch('/join-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room, password, nickname })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          window.location.href = `/chat?room=${encodeURIComponent(room)}`;
+        } else {
+          document.getElementById('login-error').textContent = data.error || 'チャット作成に失敗しました。';
+        }
+      })
+      .catch(err => {
+        console.error('通信エラー:', err);
+        document.getElementById('login-error').textContent = 'サーバーに接続できませんでした。';
+      });
+    });
+  </script>
 </body>
 </html>

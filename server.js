@@ -81,6 +81,31 @@ app.get('/session-info', (req, res) => {
   });
 });
 
+// 🔽 追加：ルーム名とパスワードの一致確認
+app.post('/check-room', async (req, res) => {
+  const { room, password } = req.body;
+  if (!room || !password) {
+    return res.json({ ok: false, error: 'ルーム名とパスワードは必須です' });
+  }
+
+  try {
+    const found = await Room.findOne({ name: room });
+    if (!found) {
+      return res.json({ ok: false, error: 'ルームが存在しません' });
+    }
+
+    const savedPassword = found.password ?? '';
+    if (savedPassword !== '' && savedPassword !== password) {
+      return res.json({ ok: false, error: 'パスワードが一致しません' });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('❌ /check-room エラー:', err);
+    res.status(500).json({ ok: false, error: 'サーバーエラー' });
+  }
+});
+
 // ルーム情報の初期化
 const rooms = {};
 const loadRoomsFromDB = async () => {
@@ -223,20 +248,4 @@ io.on('connection', (socket) => {
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
 
       if (userId === rooms[currentRoom].leader) {
-        const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
-        rooms[currentRoom].leader = remainingUserIds[0] || null;
-        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
-      }
-
-      if (Object.keys(rooms[currentRoom].userMap).length === 0) {
-        delete rooms[currentRoom];
-      }
-    }
-  });
-});
-
-// サーバー起動
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+        const remainingUserIds = Object.values(

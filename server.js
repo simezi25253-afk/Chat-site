@@ -48,11 +48,37 @@ io.use((socket, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => res.redirect('/login.html'));
+app.get('/', (req, res) => res.redirect('/page1.html'));
 app.use('/', authRoutes);
 app.use('/', myRoomsRoutes);
 app.get('/chat', requireLogin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
+});
+
+// 🔽 追加：チャット作成時のセッション保存
+app.post('/join-room', (req, res) => {
+  const { room, password, nickname } = req.body;
+  if (!room || !nickname) return res.json({ ok: false, error: 'ルーム名とニックネームは必須です' });
+
+  if (!req.session.userId) {
+    req.session.userId = new mongoose.Types.ObjectId();
+  }
+
+  req.session.nickname = nickname;
+  req.session.room = room;
+  req.session.password = password;
+
+  res.json({ ok: true });
+});
+
+// 🔽 追加：セッション情報取得API
+app.get('/session-info', (req, res) => {
+  res.json({
+    userId: req.session.userId,
+    nickname: req.session.nickname,
+    room: req.session.room,
+    password: req.session.password
+  });
 });
 
 // ルーム情報の初期化
@@ -124,15 +150,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('newMessage', async ({ room, text }) => {
-    console.log(`📨 [newMessage] from ${socket.id} in room "${room}": ${text}`);
-
-    if (!rooms[room]) {
-      console.warn(`⚠️ Room "${room}" not found`);
-      return;
-    }
-
     const userId = socket.request.session?.userId;
-    const nickname = rooms[room].users[socket.id] || '名無し';
+    const nickname = rooms[room]?.users[socket.id] || '名無し';
 
     const msg = {
       id: `${Date.now()}-${socket.id}`,
@@ -145,14 +164,7 @@ io.on('connection', (socket) => {
 
     rooms[room].messages.push(msg);
     io.to(room).emit('newMessage', msg);
-
-    try {
-      await Room.updateOne({ name: room }, { $push: { messages: msg } }, { upsert: true });
-    } catch (err) {
-      console.error('❌ Failed to save message to DB:', err);
-    }
-
-    console.log(`✅ [newMessage] broadcasted to room "${room}"`);
+    await Room.updateOne({ name: room }, { $push: { messages: msg } }, { upsert: true });
   });
 
   socket.on('messageRead', ({ room, messageId }) => {

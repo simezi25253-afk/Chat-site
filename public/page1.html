@@ -1,9 +1,50 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
   <meta charset="UTF-8">
   <title>チャット作成</title>
   <link rel="stylesheet" href="styles1.css">
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f5f5f5;
+      padding: 40px;
+    }
+    #login {
+      background: white;
+      padding: 30px;
+      max-width: 400px;
+      margin: auto;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    input {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px;
+      width: 100%;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    #login-error {
+      margin-top: 10px;
+      color: red;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
   <div id="login">
@@ -12,7 +53,7 @@
     <input id="room-password" placeholder="パスワード（任意）" />
     <input id="nickname" placeholder="ニックネーム" />
     <button id="join-btn">チャット作成</button>
-    <div id="login-error" style="color:red; margin-top:10px;"></div>
+    <div id="login-error"></div>
   </div>
 
   <script>

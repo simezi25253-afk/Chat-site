@@ -247,22 +247,4 @@ io.on('connection', (socket) => {
 
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
 
-      if (userId === rooms[currentRoom].leader) {
-        const remainingUserIds = Object.values(
-        const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
-        rooms[currentRoom].leader = remainingUserIds[0] || null;
-        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
-      }
-
-      if (Object.keys(rooms[currentRoom].userMap).length === 0) {
-        delete rooms[currentRoom];
-      }
-    }
-  });
-}); // ← これが io.on('connection') の閉じカッコ
-
-// サーバー起動
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+      if (userId === rooms[currentRoom].leader

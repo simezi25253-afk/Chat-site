@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ルームに参加</title>
+  <link rel="stylesheet" href="styles1.css">
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #f5f5f5;
+      padding: 40px;
+    }
+    #join-room {
+      background: white;
+      padding: 30px;
+      max-width: 400px;
+      margin: auto;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    input {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      font-size: 16px;
+    }
+    button {
+      margin-top: 15px;
+      padding: 10px;
+      width: 100%;
+      font-size: 16px;
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #1976D2;
+    }
+    #join-error {
+      margin-top: 10px;
+      color: red;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="join-room">
+    <h2>参加するルームを検索</h2>
+    <input id="room-name" placeholder="ルーム名" />
+    <input id="room-password" placeholder="パスワード" />
+    <button id="search-btn">検索</button>
+    <div id="join-error"></div>
+  </div>
+
+  <script>
+    document.getElementById('search-btn').addEventListener('click', () => {
+      const room = document.getElementById('room-name').value.trim();
+      const password = document.getElementById('room-password').value.trim();
+      const errorDiv = document.getElementById('join-error');
+      errorDiv.textContent = '';
+
+      if (!room && !password) {
+        errorDiv.textContent = 'ルーム名とパスワードを入力してください。';
+        return;
+      }
+      if (!room) {
+        errorDiv.textContent = 'ルーム名を入力してください。';
+        return;
+      }
+      if (!password) {
+        errorDiv.textContent = 'パスワードを入力してください。';
+        return;
+      }
+
+      fetch('/check-room', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room, password })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) {
+          const nickname = prompt('ニックネームを入力してください');
+          if (!nickname || nickname.trim() === '') {
+            errorDiv.textContent = 'ニックネームが必要です。';
+            return;
+          }
+
+          fetch('/join-room', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ room, password, nickname })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data.ok) {
+              window.location.href = `/chat?room=${encodeURIComponent(room)}`;
+            } else {
+              errorDiv.textContent = data.error || '入室に失敗しました。';
+            }
+          });
+        } else {
+          alert('一致するルームが見つかりません。ホームに戻ります。');
+          window.location.href = '/page1.html';
+        }
+      })
+      .catch(err => {
+        console.error('通信エラー:', err);
+        errorDiv.textContent = 'サーバーに接続できませんでした。';
+      });
+    });
+  </script>
+</body>
+</html>

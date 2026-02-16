@@ -6,7 +6,7 @@ const messageSchema = new mongoose.Schema({
   nickname: String,
   text: String,
   ts: Number,
-  readBy: [String] // ← ここを ObjectId から String に変更！
+  readBy: [String] // ← ObjectId から String に修正済み！
 });
 
 const roomSchema = new mongoose.Schema({

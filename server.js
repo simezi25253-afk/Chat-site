@@ -246,4 +246,19 @@ io.on('connection', (socket) => {
 
       if (userId === rooms[currentRoom].leader) {
         const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
-        rooms[currentRoom].
+        rooms[currentRoom].leader = remainingUserIds[0] || null;
+        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
+      }
+
+      if (Object.keys(rooms[currentRoom].userMap).length === 0) {
+        delete rooms[currentRoom];
+      }
+    }
+  });
+});
+
+// サーバー起動
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});

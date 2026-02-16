@@ -239,4 +239,11 @@ io.on('connection', (socket) => {
       }
 
       if (nickname) {
-        io.to
+        io.to(currentRoom).emit('systemMessage', `${nickname} が一時退席しました`);
+      }
+
+      io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
+
+      if (userId === rooms[currentRoom].leader) {
+        const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
+        rooms[currentRoom].

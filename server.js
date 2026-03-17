@@ -22,11 +22,19 @@ mongoose.connect(mongoURI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
-// ルームごとのメッセージコレクションを作る関数
+// ルームごとのメッセージコレクションを作る関数（OverwriteModelError対策済み）
 function getRoomMessageModel(roomName) {
   const safeName = roomName.replace(/[^a-zA-Z0-9]/g, "_");
+  const modelName = `room_${safeName}`;
+
+  // 既存モデルがあれば再利用
+  if (mongoose.models[modelName]) {
+    return mongoose.models[modelName];
+  }
+
+  // 初回のみ作成
   return mongoose.model(
-    `room_${safeName}`,
+    modelName,
     new mongoose.Schema({
       userId: String,
       nickname: String,
@@ -34,7 +42,7 @@ function getRoomMessageModel(roomName) {
       ts: Number,
       readBy: [String]
     }),
-    `room_${safeName}`
+    modelName
   );
 }
 
@@ -77,7 +85,7 @@ app.post('/join-room', (req, res) => {
   if (!room || !nickname) return res.json({ ok: false, error: 'ルーム名とニックネームは必須です' });
 
   if (!req.session.userId) {
-    req.session.userId = new mongoose.Types.ObjectId();
+    req.session.userId = new mongoose.Types.ObjectId().toString();
   }
 
   req.session.nickname = nickname;
@@ -133,7 +141,7 @@ const loadRoomsFromDB = async () => {
         users: {},
         userMap: {},
         leader: r.leader,
-        members: r.members.map(id => id.toString())
+        members: r.members
       };
     });
     console.log('🔁 MongoDBからルーム一覧を復元しました');
@@ -142,6 +150,7 @@ const loadRoomsFromDB = async () => {
   }
 };
 loadRoomsFromDB();
+
 // ソケット通信
 io.on('connection', (socket) => {
   let currentRoom = null;
@@ -172,9 +181,9 @@ io.on('connection', (socket) => {
     } else {
       const savedPassword = rooms[room].password ?? '';
       const inputPassword = password ?? '';
-      const isAlreadyMember = rooms[room].members?.includes(userId);
+      const isAlreadyMember = rooms[room].members.includes(userId);
 
-      if (!isAlreadyMember && savedPassword !== '' && String(savedPassword) !== String(inputPassword)) {
+      if (!isAlreadyMember && savedPassword !== '' && savedPassword !== inputPassword) {
         return callback({ ok: false, error: 'Wrong password' });
       }
 
@@ -192,7 +201,7 @@ io.on('connection', (socket) => {
     socket.emit('leader', rooms[room].leader);
     io.to(room).emit('onlineUsers', rooms[room].userMap);
 
-    // ルーム専用メッセージDBから読み込み
+    // メッセージ読み込み
     const MessageModel = getRoomMessageModel(room);
     const messages = await MessageModel.find({}).lean();
 
@@ -263,8 +272,6 @@ io.on('connection', (socket) => {
   // 切断処理
   socket.on('disconnect', () => {
     console.log(`⚠️ [disconnect] socket ${socket.id} disconnected`);
-    console.log('currentRoom:', currentRoom);
-    console.log('session userId:', socket.request.session?.userId);
 
     if (currentRoom && rooms[currentRoom]) {
       const nickname = rooms[currentRoom].users[socket.id];
@@ -282,7 +289,6 @@ io.on('connection', (socket) => {
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
 
       // リーダーは絶対に変更しない（不具合③対応）
-      // → 何もしない
 
       if (Object.keys(rooms[currentRoom].userMap).length === 0) {
         delete rooms[currentRoom];

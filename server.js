@@ -27,12 +27,10 @@ function getRoomMessageModel(roomName) {
   const safeName = roomName.replace(/[^a-zA-Z0-9]/g, "_");
   const modelName = `room_${safeName}`;
 
-  // 既存モデルがあれば再利用
   if (mongoose.models[modelName]) {
     return mongoose.models[modelName];
   }
 
-  // 初回のみ作成
   return mongoose.model(
     modelName,
     new mongoose.Schema({
@@ -72,10 +70,15 @@ io.use((socket, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// ホーム画面
 app.get('/', (req, res) => res.redirect('/page1.html'));
+
 app.use('/', authRoutes);
 app.use('/', myRoomsRoutes);
-app.get('/chat', requireLogin, (req, res) => {
+
+// 🔥 ルーム固有URL（動的ルーティング）
+app.get('/room/:roomName', requireLogin, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'chat.html'));
 });
 
@@ -92,7 +95,10 @@ app.post('/join-room', (req, res) => {
   req.session.room = room;
   req.session.password = password;
 
-  res.json({ ok: true });
+  // 🔥 ルーム固有URLを返す
+  const roomUrl = `/room/${encodeURIComponent(room)}`;
+
+  res.json({ ok: true, url: roomUrl });
 });
 
 // セッション情報取得API
@@ -130,7 +136,7 @@ app.post('/check-room', async (req, res) => {
   }
 });
 
-// ルーム情報の初期化（messages は読み込まない）
+// ルーム情報の初期化
 const rooms = {};
 const loadRoomsFromDB = async () => {
   try {
@@ -159,7 +165,6 @@ io.on('connection', (socket) => {
     const userId = socket.request.session?.userId;
     if (!userId) return callback({ ok: false, error: 'ログイン情報が見つかりません' });
 
-    // ルームが存在しない場合は作成
     if (!rooms[room]) {
       rooms[room] = {
         password,
@@ -176,7 +181,6 @@ io.on('connection', (socket) => {
         members: [userId]
       });
 
-      // ルーム専用コレクションを作成
       getRoomMessageModel(room);
     } else {
       const savedPassword = rooms[room].password ?? '';
@@ -201,7 +205,6 @@ io.on('connection', (socket) => {
     socket.emit('leader', rooms[room].leader);
     io.to(room).emit('onlineUsers', rooms[room].userMap);
 
-    // メッセージ読み込み
     const MessageModel = getRoomMessageModel(room);
     const messages = await MessageModel.find({}).lean();
 
@@ -213,7 +216,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // メッセージ送信
   socket.on('newMessage', async ({ room, text }) => {
     const userId = socket.request.session?.userId;
     const nickname = rooms[room]?.users[socket.id] || '名無し';
@@ -232,7 +234,6 @@ io.on('connection', (socket) => {
     io.to(room).emit('newMessage', msg);
   });
 
-  // 既読処理
   socket.on('messageRead', async ({ room, messageId }) => {
     const MessageModel = getRoomMessageModel(room);
     const msg = await MessageModel.findById(messageId);
@@ -248,7 +249,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // メッセージ削除
   socket.on('deleteMessage', async ({ room, messageId }) => {
     const userId = socket.request.session?.userId;
     const MessageModel = getRoomMessageModel(room);
@@ -260,7 +260,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  // パスワード変更（リーダーのみ）
   socket.on('changePassword', ({ room, newPassword }) => {
     const userId = socket.request.session?.userId;
     if (rooms[room]?.leader === userId) {
@@ -269,10 +268,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 切断処理
   socket.on('disconnect', () => {
-    console.log(`⚠️ [disconnect] socket ${socket.id} disconnected`);
-
     if (currentRoom && rooms[currentRoom]) {
       const nickname = rooms[currentRoom].users[socket.id];
       const userId = socket.request.session?.userId;
@@ -287,8 +283,6 @@ io.on('connection', (socket) => {
       }
 
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
-
-      // リーダーは絶対に変更しない（不具合③対応）
 
       if (Object.keys(rooms[currentRoom].userMap).length === 0) {
         delete rooms[currentRoom];

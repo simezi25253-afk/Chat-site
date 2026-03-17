@@ -1,20 +1,10 @@
 const mongoose = require('mongoose');
 
-const messageSchema = new mongoose.Schema({
-  id: String,
-  userId: mongoose.Schema.Types.ObjectId,
-  nickname: String,
-  text: String,
-  ts: Number,
-  readBy: [String] // ← ObjectId から String に修正済み！
+const RoomSchema = new mongoose.Schema({
+  name: { type: String, required: true, unique: true },
+  password: { type: String, default: '' },
+  leader: { type: String, required: true },   // userId を文字列で保存
+  members: { type: [String], default: [] }    // メンバーも文字列で保存
 });
 
-const roomSchema = new mongoose.Schema({
-  name: String,
-  password: String,
-  leader: mongoose.Schema.Types.ObjectId,
-  members: [mongoose.Schema.Types.ObjectId],
-  messages: [messageSchema]
-});
-
-module.exports = mongoose.model('Room', roomSchema);
+module.exports = mongoose.model('Room', RoomSchema);

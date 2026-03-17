@@ -22,6 +22,22 @@ mongoose.connect(mongoURI, {
   console.error('❌ MongoDB connection error:', err);
 });
 
+// ルームごとのメッセージコレクションを作る関数
+function getRoomMessageModel(roomName) {
+  const safeName = roomName.replace(/[^a-zA-Z0-9]/g, "_");
+  return mongoose.model(
+    `room_${safeName}`,
+    new mongoose.Schema({
+      userId: String,
+      nickname: String,
+      text: String,
+      ts: Number,
+      readBy: [String]
+    }),
+    `room_${safeName}`
+  );
+}
+
 // セッション設定
 const sessionMiddleware = session({
   secret: 'your-secret-key',
@@ -106,7 +122,7 @@ app.post('/check-room', async (req, res) => {
   }
 });
 
-// ルーム情報の初期化
+// ルーム情報の初期化（messages は読み込まない）
 const rooms = {};
 const loadRoomsFromDB = async () => {
   try {
@@ -116,18 +132,16 @@ const loadRoomsFromDB = async () => {
         password: r.password,
         users: {},
         userMap: {},
-        messages: r.messages,
         leader: r.leader,
         members: r.members.map(id => id.toString())
       };
     });
-    console.log('🔁 MongoDBからルーム情報を復元しました');
+    console.log('🔁 MongoDBからルーム一覧を復元しました');
   } catch (err) {
     console.error('❌ MongoDBからの読み込みに失敗:', err);
   }
 };
 loadRoomsFromDB();
-
 // ソケット通信
 io.on('connection', (socket) => {
   let currentRoom = null;
@@ -136,23 +150,34 @@ io.on('connection', (socket) => {
     const userId = socket.request.session?.userId;
     if (!userId) return callback({ ok: false, error: 'ログイン情報が見つかりません' });
 
+    // ルームが存在しない場合は作成
     if (!rooms[room]) {
       rooms[room] = {
         password,
         users: {},
         userMap: {},
-        messages: [],
         leader: userId,
         members: [userId]
       };
-      await Room.create({ name: room, password, leader: userId, members: [userId], messages: [] });
+
+      await Room.create({
+        name: room,
+        password,
+        leader: userId,
+        members: [userId]
+      });
+
+      // ルーム専用コレクションを作成
+      getRoomMessageModel(room);
     } else {
       const savedPassword = rooms[room].password ?? '';
       const inputPassword = password ?? '';
       const isAlreadyMember = rooms[room].members?.includes(userId);
+
       if (!isAlreadyMember && savedPassword !== '' && String(savedPassword) !== String(inputPassword)) {
         return callback({ ok: false, error: 'Wrong password' });
       }
+
       if (!isAlreadyMember) {
         await Room.updateOne({ name: room }, { $addToSet: { members: userId } });
         rooms[room].members.push(userId);
@@ -166,20 +191,25 @@ io.on('connection', (socket) => {
     socket.join(room);
     socket.emit('leader', rooms[room].leader);
     io.to(room).emit('onlineUsers', rooms[room].userMap);
+
+    // ルーム専用メッセージDBから読み込み
+    const MessageModel = getRoomMessageModel(room);
+    const messages = await MessageModel.find({}).lean();
+
     callback({
       ok: true,
       isLeader: rooms[room].leader === userId,
-      messages: rooms[room].messages,
+      messages,
       userId
     });
   });
 
+  // メッセージ送信
   socket.on('newMessage', async ({ room, text }) => {
     const userId = socket.request.session?.userId;
     const nickname = rooms[room]?.users[socket.id] || '名無し';
 
     const msg = {
-      id: `${Date.now()}-${socket.id}`,
       userId,
       nickname,
       text,
@@ -187,15 +217,21 @@ io.on('connection', (socket) => {
       readBy: [socket.id]
     };
 
-    rooms[room].messages.push(msg);
+    const MessageModel = getRoomMessageModel(room);
+    await MessageModel.create(msg);
+
     io.to(room).emit('newMessage', msg);
-    await Room.updateOne({ name: room }, { $push: { messages: msg } }, { upsert: true });
   });
 
-  socket.on('messageRead', ({ room, messageId }) => {
-    const msg = rooms[room]?.messages.find(m => m.id === messageId);
+  // 既読処理
+  socket.on('messageRead', async ({ room, messageId }) => {
+    const MessageModel = getRoomMessageModel(room);
+    const msg = await MessageModel.findById(messageId);
+
     if (msg && !msg.readBy.includes(socket.id)) {
       msg.readBy.push(socket.id);
+      await msg.save();
+
       io.to(room).emit('updateRead', {
         messageId,
         readCount: msg.readBy.length - 1
@@ -203,27 +239,28 @@ io.on('connection', (socket) => {
     }
   });
 
+  // メッセージ削除
   socket.on('deleteMessage', async ({ room, messageId }) => {
-    const index = rooms[room]?.messages.findIndex(
-      m => m.id === messageId && m.userId?.toString() === socket.request.session?.userId
-    );
-    if (index !== -1 && index !== undefined) {
-      rooms[room].messages.splice(index, 1);
+    const userId = socket.request.session?.userId;
+    const MessageModel = getRoomMessageModel(room);
+
+    const msg = await MessageModel.findById(messageId);
+    if (msg && msg.userId === userId) {
+      await MessageModel.deleteOne({ _id: messageId });
       io.to(room).emit('deleteMessage', { messageId });
-      await Room.updateOne(
-        { name: room },
-        { $pull: { messages: { id: messageId, userId: socket.request.session?.userId } } }
-      );
     }
   });
 
+  // パスワード変更（リーダーのみ）
   socket.on('changePassword', ({ room, newPassword }) => {
     const userId = socket.request.session?.userId;
     if (rooms[room]?.leader === userId) {
       rooms[room].password = newPassword;
+      Room.updateOne({ name: room }, { password: newPassword }).exec();
     }
   });
 
+  // 切断処理
   socket.on('disconnect', () => {
     console.log(`⚠️ [disconnect] socket ${socket.id} disconnected`);
     console.log('currentRoom:', currentRoom);
@@ -244,11 +281,8 @@ io.on('connection', (socket) => {
 
       io.to(currentRoom).emit('onlineUsers', rooms[currentRoom].userMap);
 
-      if (userId === rooms[currentRoom].leader) {
-        const remainingUserIds = Object.values(rooms[currentRoom].userMap).map(u => u.userId);
-        rooms[currentRoom].leader = remainingUserIds[0] || null;
-        io.to(currentRoom).emit('leader', rooms[currentRoom].leader);
-      }
+      // リーダーは絶対に変更しない（不具合③対応）
+      // → 何もしない
 
       if (Object.keys(rooms[currentRoom].userMap).length === 0) {
         delete rooms[currentRoom];
